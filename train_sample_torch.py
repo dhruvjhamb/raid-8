@@ -12,7 +12,7 @@ import numpy as np
 import torch
 import torchvision
 import torchvision.transforms as transforms
-from model import Net, DummyNet
+from model import *
 import time
 
 from torch import nn
@@ -24,7 +24,7 @@ def validate(data_dir, data_transforms, num_classes,
 
     if model == None:
         ckpt = torch.load('latest.pt')
-        model = DummyNet(num_classes, im_height, im_width)
+        model = str_to_net[ckpt['model']](num_classes, im_height, im_width)
         model.load_state_dict(ckpt['net'])
         model.eval()
         print ("Number of parameters: {}, Time: {}, User: {}"
@@ -68,8 +68,8 @@ def main():
         train_loader = torch.utils.data.DataLoader(train_set, batch_size=batch_size,
                                                    shuffle=True, num_workers=4, pin_memory=True)
 
-        # Create a simple model
-        model = DummyNet(len(CLASS_NAMES), im_height, im_width)
+        model_name = 'dummy'
+        model = str_to_net[model_name](len(CLASS_NAMES), im_height, im_width)
         optim = torch.optim.Adam(model.parameters())
         criterion = nn.CrossEntropyLoss()
 
@@ -87,15 +87,18 @@ def main():
                 train_correct += predicted.eq(targets).sum().item()
                 print("\r", end='')
                 print(f'training {100 * idx / len(train_loader):.2f}%: {train_correct / train_total:.3f}', end='')
-            torch.save({
+            ckpt_data = {
                 'net': model.state_dict(),
+                'model': model_name,
                 'num_params': sum(p.numel() for p in model.parameters()),
                 'time': time.time() - start_time,
                 'num_epochs': i + 1,
                 'machine': getpass.getuser(),
                 'validation_acc': validate(data_dir, data_transforms,
                     len(CLASS_NAMES), im_height, im_width, model),
-            }, 'latest.pt')
+            }
+            ckpt_file = 'latest.pt'.format()
+            torch.save(ckpt_data, ckpt_file)
 
 
 if __name__ == '__main__':
