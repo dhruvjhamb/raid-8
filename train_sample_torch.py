@@ -6,14 +6,40 @@ and to validate your own code submission.
 """
 
 import pathlib
+import sys
+import getpass
 import numpy as np
 import torch
 import torchvision
 import torchvision.transforms as transforms
-from model import Net
+from model import Net, DummyNet
+import time
 
 from torch import nn
 
+def validate(data_dir, data_transforms, num_classes,
+    im_height, im_width, model=None):
+    val_set = torchvision.datasets.ImageFolder(data_dir / 'val', data_transforms)
+    val_loader = torch.utils.data.DataLoader(val_set, batch_size=1024, num_workers=4, pin_memory=True)
+
+    if model == None:
+        ckpt = torch.load('latest.pt')
+        model = DummyNet(num_classes, im_height, im_width)
+        model.load_state_dict(ckpt['net'])
+        model.eval()
+        print ("Number of parameters: {}, Time: {}, User: {}"
+                        .format(ckpt['num_params'], ckpt['time'], ckpt['machine'])) 
+
+    val_total, val_correct = 0, 0
+    for idx, (inputs, targets) in enumerate(val_loader):
+        outputs = model(inputs)
+        _, predicted = outputs.max(1)
+        val_total += targets.size(0)
+        val_correct += predicted.eq(targets).sum().item()
+        print("\r", end='')
+        print(f'validation {100 * idx / len(val_loader):.2f}%: {val_correct / val_total:.3f}', end='')
+
+    return val_correct / val_total
 
 def main():
     # Create a pytorch dataset
@@ -32,42 +58,44 @@ def main():
         transforms.ToTensor(),
         transforms.Normalize((0, 0, 0), tuple(np.sqrt((255, 255, 255)))),
     ])
-    train_set = torchvision.datasets.ImageFolder(data_dir / 'train', data_transforms)
-    train_loader = torch.utils.data.DataLoader(train_set, batch_size=batch_size,
-                                               shuffle=True, num_workers=4, pin_memory=True)
 
-    # Create a simple model
-    model = Net(len(CLASS_NAMES), im_height, im_width)
-    optim = torch.optim.Adam(model.parameters())
-    criterion = nn.CrossEntropyLoss()
-    for i in range(num_epochs):
-        train_total, train_correct = 0,0
-        for idx, (inputs, targets) in enumerate(train_loader):
-            optim.zero_grad()
-            outputs = model(inputs)
-            loss = criterion(outputs, targets)
-            loss.backward()
-            optim.step()
-            _, predicted = outputs.max(1)
-            train_total += targets.size(0)
-            train_correct += predicted.eq(targets).sum().item()
-            print("\r", end='')
-            print(f'training {100 * idx / len(train_loader):.2f}%: {train_correct / train_total:.3f}', end='')
-        torch.save({
-            'net': model.state_dict(),
-        }, 'latest.pt')
+    if len(sys.argv) > 1 and sys.argv[1] == 'val':
+        validate(data_dir, data_transforms, len(CLASS_NAMES),
+            im_height, im_width)
 
-    # val_set = torchvision.datasets.ImageFolder(data_dir / 'val', data_transforms)
-    # val_loader = torch.utils.data.DataLoader(val_set, num_workers=4, pin_memory=True)
+    else:        
+        train_set = torchvision.datasets.ImageFolder(data_dir / 'train', data_transforms)
+        train_loader = torch.utils.data.DataLoader(train_set, batch_size=batch_size,
+                                                   shuffle=True, num_workers=4, pin_memory=True)
 
-    # ckpt = torch.load('latest.pt')
-    # model = Net(len(CLASS_NAMES), im_height, im_width)
-    # model.load_state_dict(ckpt['net'])
-    # model.eval()
+        # Create a simple model
+        model = DummyNet(len(CLASS_NAMES), im_height, im_width)
+        optim = torch.optim.Adam(model.parameters())
+        criterion = nn.CrossEntropyLoss()
 
-    # for idx, (inputs, targets) in enumerate(train_loader):
-    #     outputs = model(inputs)
-    #     loss = criterion(outputs, targets)
+        start_time = time.time()
+        for i in range(num_epochs):
+            train_total, train_correct = 0,0
+            for idx, (inputs, targets) in enumerate(train_loader):
+                optim.zero_grad()
+                outputs = model(inputs)
+                loss = criterion(outputs, targets)
+                loss.backward()
+                optim.step()
+                _, predicted = outputs.max(1)
+                train_total += targets.size(0)
+                train_correct += predicted.eq(targets).sum().item()
+                print("\r", end='')
+                print(f'training {100 * idx / len(train_loader):.2f}%: {train_correct / train_total:.3f}', end='')
+            torch.save({
+                'net': model.state_dict(),
+                'num_params': sum(p.numel() for p in model.parameters()),
+                'time': time.time() - start_time,
+                'num_epochs': i + 1,
+                'machine': getpass.getuser(),
+                'validation_acc': validate(data_dir, data_transforms,
+                    len(CLASS_NAMES), im_height, im_width, model),
+            }, 'latest.pt')
 
 
 if __name__ == '__main__':
