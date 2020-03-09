@@ -6,9 +6,9 @@ and to validate your own code submission.
 """
 
 import pathlib
-import sys
 import getpass
 import argparse
+import os
 
 import numpy as np
 import torch
@@ -37,7 +37,7 @@ def validate(data_dir, data_transforms, num_classes,
         model.load_state_dict(ckpt['net'])
         model.eval()
         print ("Number of parameters: {}, Time: {}, User: {}"
-                        .format(ckpt['num_params'], ckpt['time'], ckpt['machine'])) 
+                        .format(ckpt['num_params'], ckpt['runtime'], ckpt['machine'])) 
 
     val_total, val_correct = 0, 0
     for idx, (inputs, targets) in enumerate(val_loader):
@@ -68,7 +68,7 @@ def main():
     num_batches = args.data * training_image_count / batch_size
     im_height = 64
     im_width = 64
-    num_epochs = 1
+    num_epochs = 2
 
     data_transforms = transforms.Compose([
         transforms.ToTensor(),
@@ -113,15 +113,20 @@ def main():
                 'net': model.state_dict(),
                 'model': model_name,
                 'num_params': sum(p.numel() for p in model.parameters()),
-                'time': time.time() - start_time,
-                'num_epochs': i + 1,
+                'runtime': time.time() - start_time,
+                'timestamp': start_time,
+                'epoch': i + 1,
                 'machine': getpass.getuser(),
                 'validation_acc': validate(data_dir, data_transforms,
                     len(CLASS_NAMES), im_height, im_width, model),
             }
-            ckpt_file = 'latest.pt'.format()
-            torch.save(ckpt_data, ckpt_file)
-
+            
+            checkpoint_dir = pathlib.Path('./checkpoints') / ckpt_data['model']
+            if not os.path.isdir(checkpoint_dir):
+                os.mkdir(checkpoint_dir)
+            ckpt_file = '{}-{}.pt'.format(
+                ckpt_data['timestamp'], ckpt_data['epoch'])
+            torch.save(ckpt_data, checkpoint_dir / ckpt_file)
 
 if __name__ == '__main__':
     main()
