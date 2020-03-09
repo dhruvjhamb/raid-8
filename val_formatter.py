@@ -18,7 +18,6 @@ def main():
 		while line:
 			if cnt % 50 == 0:
 				print("Line {} processed".format(cnt))
-			line = fp.readline()
 			tokens = line.split()
 			if len(tokens) < 6:
 				break
@@ -26,6 +25,7 @@ def main():
 				classes[tokens[1]] = data_dir / tokens[1]
 				os.mkdir(classes[tokens[1]])
 			shutil.copy(img_dir / tokens[0], classes[tokens[1]])
+			line = fp.readline()
 			cnt += 1
 
 if __name__ == '__main__':
