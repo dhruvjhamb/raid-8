@@ -22,6 +22,7 @@ from torch import nn
 def parse():
     parser = argparse.ArgumentParser(description='Train or validate predefined models.')
     parser.add_argument('--val', action='store_true')
+    parser.add_argument('--data', type=float, default=1.0)
     parser.add_argument('models', metavar='model', type=str, nargs='*')
     return parser.parse_args()
 
@@ -55,11 +56,16 @@ def main():
     # Create a pytorch dataset
     data_dir = pathlib.Path('./data/tiny-imagenet-200')
     image_count = len(list(data_dir.glob('**/*.JPEG')))
+    training_image_count = len(list(data_dir.glob('train/**/*.JPEG')))
     CLASS_NAMES = np.array([item.name for item in (data_dir / 'train').glob('*')])
-    print('Discovered {} images'.format(image_count))
+    print('Discovered {} total images'.format(image_count))
+    print('Discovered {} training images'.format(training_image_count))
+    print('Training with {} of the dataset ({} training images)'.format(
+        args.data, int(args.data * training_image_count)))
 
     # Create the training data generator
     batch_size = 32
+    num_batches = args.data * training_image_count / batch_size
     im_height = 64
     im_width = 64
     num_epochs = 1
@@ -91,6 +97,8 @@ def main():
         for i in range(num_epochs):
             train_total, train_correct = 0,0
             for idx, (inputs, targets) in enumerate(train_loader):
+                if idx > num_batches:
+                    break
                 optim.zero_grad()
                 outputs = model(inputs)
                 loss = criterion(outputs, targets)
