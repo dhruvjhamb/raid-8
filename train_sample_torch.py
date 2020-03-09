@@ -8,6 +8,8 @@ and to validate your own code submission.
 import pathlib
 import sys
 import getpass
+import argparse
+
 import numpy as np
 import torch
 import torchvision
@@ -16,6 +18,12 @@ from model import *
 import time
 
 from torch import nn
+
+def parse():
+    parser = argparse.ArgumentParser(description='Train or validate predefined models.')
+    parser.add_argument('--val', action='store_true')
+    parser.add_argument('models', metavar='model', type=str, nargs='*')
+    return parser.parse_args()
 
 def validate(data_dir, data_transforms, num_classes,
     im_height, im_width, model=None):
@@ -42,6 +50,8 @@ def validate(data_dir, data_transforms, num_classes,
     return val_correct / val_total
 
 def main():
+    args = parse() 
+
     # Create a pytorch dataset
     data_dir = pathlib.Path('./data/tiny-imagenet-200')
     image_count = len(list(data_dir.glob('**/*.JPEG')))
@@ -59,16 +69,20 @@ def main():
         transforms.Normalize((0, 0, 0), tuple(np.sqrt((255, 255, 255)))),
     ])
 
-    if len(sys.argv) > 1 and sys.argv[1] == 'val':
+    if args.val:
         validate(data_dir, data_transforms, len(CLASS_NAMES),
             im_height, im_width)
 
     else:        
+        assert len(args.models) <= 1, "If training, do not pass in more than one model."
         train_set = torchvision.datasets.ImageFolder(data_dir / 'train', data_transforms)
         train_loader = torch.utils.data.DataLoader(train_set, batch_size=batch_size,
                                                    shuffle=True, num_workers=4, pin_memory=True)
 
-        model_name = 'dummy'
+        if len(args.models) == 0 or str_to_net.get( args.models[0] ) == None:
+            model_name = 'dummy'
+        else:
+            model_name = args.models[0]
         model = str_to_net[model_name](len(CLASS_NAMES), im_height, im_width)
         optim = torch.optim.Adam(model.parameters())
         criterion = nn.CrossEntropyLoss()
