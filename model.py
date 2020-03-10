@@ -31,8 +31,17 @@ class DummyNet(nn.Module):
 		x = self.layer1(x)
 		return x
 
+def AlexFineTuned(num_classes, im_height, im_width):
+    alexnet = torchvision.models.alexnet(pretrained=True)
+    for param in alexnet.parameters():
+        param.requires_grad = False
+    num_features = alexnet.classifier[6].in_features
+    alexnet.classifier[6] = nn.Linear(num_features, num_classes)
+    return alexnet
+
 str_to_net = {
     'net': Net,
     'dummy': DummyNet,
+    'alex': AlexFineTuned,
 }
 

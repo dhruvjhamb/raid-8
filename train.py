@@ -68,11 +68,14 @@ def main():
     num_batches = args.data * training_image_count / batch_size
     im_height = 64
     im_width = 64
-    num_epochs = 2
+    num_epochs = 1
 
+    im_height = 224
+    im_width = 224
     data_transforms = transforms.Compose([
+        transforms.Resize((im_height, im_width)),
         transforms.ToTensor(),
-        transforms.Normalize((0, 0, 0), tuple(np.sqrt((255, 255, 255)))),
+        transforms.Normalize((0.485, 0.456, 0.406), tuple(np.sqrt((0.229, 0.224, 0.255)))),
     ])
 
     if args.val:
@@ -90,7 +93,14 @@ def main():
         else:
             model_name = args.models[0]
         model = str_to_net[model_name](len(CLASS_NAMES), im_height, im_width)
-        optim = torch.optim.Adam(model.parameters())
+        if model_name == 'alex':
+            params = []
+            for name, param in model.named_parameters():
+                if param.requires_grad:
+                    params.append(param)
+            optim = torch.optim.Adam(params)
+        else:
+            optim = torch.optim.Adam(model.parameters())
         criterion = nn.CrossEntropyLoss()
 
         start_time = time.time()
