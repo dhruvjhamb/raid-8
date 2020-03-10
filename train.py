@@ -23,22 +23,25 @@ def parse():
     parser = argparse.ArgumentParser(description='Train or validate predefined models.')
     parser.add_argument('--val', action='store_true')
     parser.add_argument('--data', type=float, default=1.0)
+    parser.add_argument('--checkpoint', type=str, default='latest.pt')
     parser.add_argument('models', metavar='model', type=str, nargs='*')
     return parser.parse_args()
 
 def validate(data_dir, data_transforms, num_classes,
-    im_height, im_width, model=None):
+    im_height, im_width, checkpoint=None, model=None):
     val_set = torchvision.datasets.ImageFolder(data_dir / 'val', data_transforms)
     val_loader = torch.utils.data.DataLoader(val_set, batch_size=1024, num_workers=4, pin_memory=True)
 
     if model == None:
-        ckpt = torch.load('latest.pt')
+        ckpt_dir = pathlib.Path('./checkpoints')
+        ckpt = torch.load(ckpt_dir / checkpoint)
         model = str_to_net[ckpt['model']](num_classes, im_height, im_width)
         model.load_state_dict(ckpt['net'])
         model.eval()
         print ("Number of parameters: {}, Time: {}, User: {}"
                         .format(ckpt['num_params'], ckpt['runtime'], ckpt['machine'])) 
 
+    model.eval()
     val_total, val_correct = 0, 0
     for idx, (inputs, targets) in enumerate(val_loader):
         outputs = model(inputs)
@@ -80,7 +83,7 @@ def main():
 
     if args.val:
         validate(data_dir, data_transforms, len(CLASS_NAMES),
-            im_height, im_width)
+            im_height, im_width, checkpoint=args.checkpoint)
 
     else:        
         assert len(args.models) <= 1, "If training, do not pass in more than one model."
@@ -103,6 +106,7 @@ def main():
             optim = torch.optim.Adam(model.parameters())
         criterion = nn.CrossEntropyLoss()
 
+        model.train()
         start_time = time.time()
         for i in range(num_epochs):
             train_total, train_correct = 0,0
@@ -128,7 +132,7 @@ def main():
                 'epoch': i + 1,
                 'machine': getpass.getuser(),
                 'validation_acc': validate(data_dir, data_transforms,
-                    len(CLASS_NAMES), im_height, im_width, model),
+                    len(CLASS_NAMES), im_height, im_width, model=model),
             }
             
             checkpoint_dir = pathlib.Path('./checkpoints') / ckpt_data['model']
