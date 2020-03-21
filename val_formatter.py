@@ -9,9 +9,9 @@ import shutil
 import os
 
 def create_ckpts_dir():
-    checkpoint_dir = pathlib.Path('./checkpoints')
-    if not os.path.isdir(checkpoint_dir):
-        os.mkdir(checkpoint_dir)
+	checkpoint_dir = pathlib.Path('./checkpoints')
+	if not os.path.isdir(checkpoint_dir):
+		os.mkdir(checkpoint_dir)
 
 def main():
 	classes = dict()
@@ -28,8 +28,8 @@ def main():
 				break
 			if classes.get(tokens[1]) == None:
 				classes[tokens[1]] = data_dir / tokens[1]
-                if not os.path.isdir(classes[tokens[1]]):
-				    os.mkdir(classes[tokens[1]])
+				if not os.path.isdir(classes[tokens[1]]):
+					os.mkdir(classes[tokens[1]])
 			shutil.copy(img_dir / tokens[0], classes[tokens[1]])
 			line = fp.readline()
 			cnt += 1
