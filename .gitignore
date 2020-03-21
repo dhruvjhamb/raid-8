@@ -1,4 +1,5 @@
-data/
+data/*
+!data/get_data.sh
 checkpoints/
 *.pt
 __pycache__/
