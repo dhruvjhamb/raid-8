@@ -1,2 +1,3 @@
 numpy>=1.16
 pillow
+torchvision==0.2.1
