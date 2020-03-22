@@ -9,3 +9,8 @@ eval.csv - An example test file
 data/get_data.sh - A script which will download the tiny-imagenet data into the data/tiny-imagenet-200 file
 
 Note: You should be using Python 3 to run this code.
+
+Insturctions:
+1. In data directory, run get_data.sh
+2. Run train_formatter.py
+3. Run val_formatter.py

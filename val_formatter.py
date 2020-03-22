@@ -2,9 +2,9 @@ import sys
 import pathlib
 from PIL import Image
 import numpy as np
-import torch
-import torchvision.transforms as transforms
-from model import Net
+#import torch
+#import torchvision.transforms as transforms
+#from model import Net
 import shutil
 import os
 
