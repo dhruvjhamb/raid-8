@@ -1,5 +1,10 @@
 data/*
 !data/get_data.sh
+!data/tiny-imagenet-transformed
+data/tiny-imagenet-transformed/*
+!data/tiny-imagenet-transformed/train
+data/tiny-imagenet-transformed/train/*
+!data/tiny-imagenet-transformed/train/README.txt
 checkpoints/
 *.pt
 __pycache__/
