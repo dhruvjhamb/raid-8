@@ -91,8 +91,13 @@ def main():
         train_loader = torch.utils.data.DataLoader(train_set, batch_size=batch_size,
                                                    shuffle=True, num_workers=4, pin_memory=True)
 
-        if len(args.models) == 0 or str_to_net.get( args.models[0] ) == None:
+        if len(args.models) == 0:
             model_name = 'dummy'
+            print ("No model specified, defaulting to {}".format(model_name))
+        elif str_to_net.get( args.models[0] ) == None:
+            model_name = 'dummy'
+            print ("Model {} does not exist, defaulting to {}".format(args.models[0],
+                model_name))
         else:
             model_name = args.models[0]
         model = str_to_net[model_name](len(CLASS_NAMES), im_height, im_width)
