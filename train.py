@@ -141,6 +141,8 @@ def main():
             }
             
             checkpoint_dir = pathlib.Path('./checkpoints') / ckpt_data['model']
+            if not os.path.isdir(pathlib.Path('./checkpoints')):
+                os.mkdir(pathlib.Path('./checkpoints'))
             if not os.path.isdir(checkpoint_dir):
                 os.mkdir(checkpoint_dir)
             ckpt_file = '{}-{}.pt'.format(
