@@ -24,10 +24,7 @@ IMAGES_PER_CLASS = 500
 
 def parse():
     parser = argparse.ArgumentParser(description='Train or validate predefined models.')
-#    parser.add_argument('--val', action='store_true')
-#    parser.add_argument('--data', type=float, default=1.0)
-#    parser.add_argument('--checkpoint', type=str, default='latest.pt')
-#    parser.add_argument('models', metavar='model', type=str, nargs='*')
+    parser.add_argument('--overwrite', action='store_true')
     return parser.parse_args()
 
 def map_classes(dir_path):
@@ -39,10 +36,6 @@ def map_classes(dir_path):
 def pairwise_equal(t):
     first_elem = torch.full(t.size(), t[0].item(), dtype=torch.long)
     return torch.equal(t, first_elem)
-
-def try_mkdir(dir_path):
-    if not os.path.isdir(dir_path):
-        os.mkdir(dir_path)
 
 def main():
     args = parse() 
@@ -64,43 +57,49 @@ def main():
     #           e.g.    (transforms.Compose(...), 0.2)
     data_transforms = dict() 
 
-    data_transforms['rotate'] = (transforms.Compose([
+    data_transforms['flip'] = (transforms.Compose([
         transforms.RandomHorizontalFlip(p=1.0),
         transforms.ToTensor(),
         ]),
-        0.2
+        0.01
     )
 
     class_map = map_classes(data_dir / 'train')
     transform_dir = pathlib.Path('./data/tiny-imagenet-transformed/train/')
+
+    batch_size = IMAGES_PER_CLASS
     for transformation in data_transforms.keys():
         curr_transform_dir = transform_dir / transformation
+        if args.overwrite:
+            print ("Overwriting transformed images at {}".format(str(curr_transform_dir)))
+            try_rmdir(curr_transform_dir)
         try_mkdir(curr_transform_dir)
 
         # Read in and transform all images
         data_transform, sampling_rate = data_transforms[transformation]
         train_set = torchvision.datasets.ImageFolder(data_dir / 'train', data_transform)
-        train_loader = torch.utils.data.DataLoader(train_set, batch_size=IMAGES_PER_CLASS,
+        train_loader = torch.utils.data.DataLoader(train_set, batch_size=batch_size,
                                                    shuffle=False, num_workers=1, pin_memory=True)
 
         curr_target = -1
+        num_permutations = int(sampling_rate * batch_size)
         for idx, (inputs, targets) in enumerate(train_loader):
             assert(pairwise_equal(targets))
             target = targets[0].item()
-            #if target != curr_target:
-            #    curr_target = target
-            #    class_counter = 0
-
             class_name = class_map[target]
+
             class_path = curr_transform_dir / class_name
             try_mkdir(class_path)
             images_path = class_path / 'images'
             try_mkdir(images_path)
-            for index, image in enumerate(inputs):
-                img_path = images_path / '{}_{}.JPEG'.format(class_name, proper_order_int(str(index)))
-                torchvision.utils.save_image(image, img_path)
 
-            #class_counter += 1
+            # Randomly sample images to permute
+            indices = torch.randperm(batch_size)
+            
+            for index in indices[:num_permutations]:
+                img_path = images_path / '{}_{}.JPEG'.format(class_name,
+                    proper_order_int(str(index.item())))
+                torchvision.utils.save_image(inputs[index.item()], img_path)
 
 if __name__ == '__main__':
     main()
