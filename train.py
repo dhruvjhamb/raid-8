@@ -96,7 +96,7 @@ def main():
         else:
             model_name = args.models[0]
         model = str_to_net[model_name](len(CLASS_NAMES), im_height, im_width)
-        if model_name == 'alex':
+        if model_name != 'dummy':   # changed from 'alex' to generalize
             params = []
             for name, param in model.named_parameters():
                 if param.requires_grad:
