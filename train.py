@@ -29,6 +29,10 @@ def parse():
 
 def validate(data_dir, data_transforms, num_classes,
     im_height, im_width, checkpoint=None, model=None):
+
+    # setting device on GPU if available, else CPU
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
     val_set = torchvision.datasets.ImageFolder(data_dir / 'val', data_transforms)
     val_loader = torch.utils.data.DataLoader(val_set, batch_size=1024, num_workers=4, pin_memory=True)
 
@@ -36,24 +40,35 @@ def validate(data_dir, data_transforms, num_classes,
         ckpt_dir = pathlib.Path('./checkpoints')
         ckpt = torch.load(ckpt_dir / checkpoint)
         model = str_to_net[ckpt['model']](num_classes, im_height, im_width)
+
         model.load_state_dict(ckpt['net'])
         model.eval()
         print ("Number of parameters: {}, Time: {}, User: {}"
                         .format(ckpt['num_params'], ckpt['runtime'], ckpt['machine'])) 
 
+    # For GPU
+    if device.type == 'cuda':
+        model.to(device)
+
     model.eval()
     val_total, val_correct = 0, 0
     for idx, (inputs, targets) in enumerate(val_loader):
-        outputs = model(inputs)
+        outputs = model(inputs.to(device))
         _, predicted = outputs.max(1)
         val_total += targets.size(0)
-        val_correct += predicted.eq(targets).sum().item()
+        val_correct += predicted.eq(targets.to(device)).sum().item()
         print("\r", end='')
         print(f'validation {100 * idx / len(val_loader):.2f}%: {val_correct / val_total:.3f}', end='')
 
     return val_correct / val_total
 
 def main():
+
+    # setting device on GPU if available, else CPU
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    print('Using device:', device)
+    print()
+
     args = parse() 
 
     # Create a pytorch dataset
@@ -96,7 +111,13 @@ def main():
         else:
             model_name = args.models[0]
         model = str_to_net[model_name](len(CLASS_NAMES), im_height, im_width)
-        if model_name == 'alex':
+
+        # For GPU
+        if device.type == 'cuda':
+            model.to(device)
+
+
+        if model_name != 'dummy':   # changed from 'alex' to generalize
             params = []
             for name, param in model.named_parameters():
                 if param.requires_grad:
@@ -113,14 +134,15 @@ def main():
             for idx, (inputs, targets) in enumerate(train_loader):
                 if idx > num_batches:
                     break
+                # gpu
                 optim.zero_grad()
-                outputs = model(inputs)
-                loss = criterion(outputs, targets)
+                outputs = model(inputs.to(device))
+                loss = criterion(outputs.to(device), targets.to(device))
                 loss.backward()
                 optim.step()
                 _, predicted = outputs.max(1)
                 train_total += targets.size(0)
-                train_correct += predicted.eq(targets).sum().item()
+                train_correct += predicted.eq(targets.to(device)).sum().item()
                 print("\r", end='')
                 print(f'training {100 * idx / len(train_loader):.2f}%: {train_correct / train_total:.3f}', end='')
             ckpt_data = {
