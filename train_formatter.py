@@ -7,15 +7,11 @@ import numpy as np
 #from model import Net
 import shutil
 import os
+from utils import *
 
 def try_mkdir(dir_path):
     if not os.path.isdir(dir_path):
         os.mkdir(dir_path)
-
-def proper_order(path):
-    tokens = path.split('_')
-    tokens[1] = tokens[1].zfill(3)
-    return '_'.join(tokens)
 
 def main():
     classes = dict()

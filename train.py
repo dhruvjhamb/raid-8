@@ -34,7 +34,7 @@ def validate(data_dir, data_transforms, num_classes,
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     val_set = torchvision.datasets.ImageFolder(data_dir / 'val', data_transforms)
-    val_loader = torch.utils.data.DataLoader(val_set, batch_size=1024, num_workers=4, pin_memory=True)
+    val_loader = torch.utils.data.DataLoader(val_set, batch_size=128, num_workers=4, pin_memory=True, shuffle=True)
 
     if model == None:
         ckpt_dir = pathlib.Path('./checkpoints')
@@ -106,8 +106,13 @@ def main():
         train_loader = torch.utils.data.DataLoader(train_set, batch_size=batch_size,
                                                    shuffle=True, num_workers=4, pin_memory=True)
 
-        if len(args.models) == 0 or str_to_net.get( args.models[0] ) == None:
+        if len(args.models) == 0:
             model_name = 'dummy'
+            print ("No model specified, defaulting to {}".format(model_name))
+        elif str_to_net.get( args.models[0] ) == None:
+            model_name = 'dummy'
+            print ("Model {} does not exist, defaulting to {}".format(args.models[0],
+                model_name))
         else:
             model_name = args.models[0]
         model = str_to_net[model_name](len(CLASS_NAMES), im_height, im_width)
@@ -127,7 +132,7 @@ def main():
             optim = torch.optim.Adam(model.parameters())
         criterion = nn.CrossEntropyLoss()
 
-        model.train()
+        #model.train()
         start_time = time.time()
         for i in range(num_epochs):
             train_total, train_correct = 0,0
@@ -141,10 +146,11 @@ def main():
                 loss.backward()
                 optim.step()
                 _, predicted = outputs.max(1)
-                train_total += targets.size(0)
-                train_correct += predicted.eq(targets.to(device)).sum().item()
+                train_total = targets.size(0)
+                train_correct = predicted.eq(targets).sum().item()
                 print("\r", end='')
                 print(f'training {100 * idx / len(train_loader):.2f}%: {train_correct / train_total:.3f}', end='')
+
             ckpt_data = {
                 'net': model.state_dict(),
                 'model': model_name,
