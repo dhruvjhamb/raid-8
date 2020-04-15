@@ -91,6 +91,9 @@ def main():
 
         # Read in and transform all images
         data_transform, sampling_rate = data_transforms[transformation]
+        # If sampling rate is 0, do NOT do this transformation
+        if sampling_rate == 0: continue
+
         num_generated_samples = args.generate_samples
 
         train_set = torchvision.datasets.ImageFolder(source_dir, data_transform)

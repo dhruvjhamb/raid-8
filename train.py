@@ -28,6 +28,8 @@ def parse():
     parser.add_argument('--data', type=float, default=1.0)
     parser.add_argument('--checkpoint', type=str, default='latest.pt')
     parser.add_argument('models', metavar='model', type=str, nargs='*')
+    parser.add_argument('--transforms', metavar='transform',
+            type=str, nargs='*')
     return parser.parse_args()
 
 def validate(data_dir, data_transforms, num_classes,
@@ -107,9 +109,18 @@ def main():
     else:        
         assert len(args.models) <= 1, "If training, do not pass in more than one model."
         train_set = torchvision.datasets.ImageFolder(data_dir / 'train', data_transforms)
-        flip_set = torchvision.datasets.ImageFolder(trans_data_dir / 'train' / 'flip', data_transforms)
-        dataset = torch.utils.data.ConcatDataset([train_set, flip_set])
-        train_loader = torch.utils.data.DataLoader(dataset, batch_size=batch_size,
+        datasets = [train_set]
+        for transformation in args.transforms:
+            try:
+                transform_dir = trans_data_dir / 'train' / transformation
+                print ("Reading transformed data from {}".format(transform_dir))
+                trans_set = torchvision.datasets.ImageFolder(transform_dir, data_transforms)
+                datasets.append(trans_set)
+            except:
+                print ("Reading transformed data FAILED, this data may not exist or may have a different name")
+
+        complete_dataset = torch.utils.data.ConcatDataset(datasets)
+        train_loader = torch.utils.data.DataLoader(complete_dataset, batch_size=batch_size,
                                                    shuffle=True, num_workers=4, pin_memory=True)
 
         if len(args.models) == 0:
@@ -185,6 +196,8 @@ def main():
             ckpt_file = '{}-{}.pt'.format(
                 ckpt_data['timestamp'], ckpt_data['epoch'])
             torch.save(ckpt_data, checkpoint_dir / ckpt_file)
+
+            print ()
 
 if __name__ == '__main__':
     main()
