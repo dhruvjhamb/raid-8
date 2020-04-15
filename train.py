@@ -147,7 +147,7 @@ def main():
                 optim.step()
                 _, predicted = outputs.max(1)
                 train_total = targets.size(0)
-                train_correct = predicted.eq(targets).sum().item()
+                train_correct = predicted.eq(targets.to(device)).sum().item()
                 print("\r", end='')
                 print(f'training {100 * idx / len(train_loader):.2f}%: {train_correct / train_total:.3f}', end='')
 
