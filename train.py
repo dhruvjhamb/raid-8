@@ -132,7 +132,7 @@ def main():
             optim = torch.optim.Adam(model.parameters())
         criterion = nn.CrossEntropyLoss()
 
-        #model.train()
+        model.train()
         start_time = time.time()
         for i in range(num_epochs):
             train_total, train_correct = 0,0
