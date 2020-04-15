@@ -9,6 +9,7 @@ import pathlib
 import getpass
 import argparse
 import os
+import math
 
 import numpy as np
 import torch
@@ -86,7 +87,7 @@ def main():
     num_batches = args.data * training_image_count / batch_size
     im_height = 64
     im_width = 64
-    num_epochs = 1
+    num_epochs = int(math.ceil(args.data))
 
     im_height = 224
     im_width = 224
