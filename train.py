@@ -20,6 +20,8 @@ import time
 
 from torch import nn
 
+TRAINING_MOVING_AVG = 5
+
 def parse():
     parser = argparse.ArgumentParser(description='Train or validate predefined models.')
     parser.add_argument('--val', action='store_true')
@@ -136,7 +138,8 @@ def main():
         model.train()
         start_time = time.time()
         for i in range(num_epochs):
-            train_total, train_correct = 0,0
+            print ("Epoch {}...".format(i))
+            train_total, train_correct = [],[]
             for idx, (inputs, targets) in enumerate(train_loader):
                 if idx > num_batches:
                     break
@@ -147,10 +150,17 @@ def main():
                 loss.backward()
                 optim.step()
                 _, predicted = outputs.max(1)
-                train_total = targets.size(0)
-                train_correct = predicted.eq(targets.to(device)).sum().item()
+                train_total.append (targets.size(0))
+                train_correct.append (predicted.eq(targets.to(device)).sum().item())
+                
+                if (len(train_total) > TRAINING_MOVING_AVG):
+                    train_total.pop(0)
+                    train_correct.pop(0)
+
+                moving_avg = sum(train_correct) / sum(train_total)
+
                 print("\r", end='')
-                print(f'training {100 * idx / len(train_loader):.2f}%: {train_correct / train_total:.3f}', end='')
+                print(f'training {100 * idx / len(train_loader):.2f}%: {100 * moving_avg:.2f}', end='')
 
             ckpt_data = {
                 'net': model.state_dict(),
