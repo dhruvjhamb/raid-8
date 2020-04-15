@@ -30,7 +30,7 @@ def parse():
 def validate(data_dir, data_transforms, num_classes,
     im_height, im_width, checkpoint=None, model=None):
     val_set = torchvision.datasets.ImageFolder(data_dir / 'val', data_transforms)
-    val_loader = torch.utils.data.DataLoader(val_set, batch_size=1024, num_workers=4, pin_memory=True)
+    val_loader = torch.utils.data.DataLoader(val_set, batch_size=128, num_workers=4, pin_memory=True, shuffle=True)
 
     if model == None:
         ckpt_dir = pathlib.Path('./checkpoints')
@@ -44,6 +44,8 @@ def validate(data_dir, data_transforms, num_classes,
     model.eval()
     val_total, val_correct = 0, 0
     for idx, (inputs, targets) in enumerate(val_loader):
+        if idx > 10:
+            break
         outputs = model(inputs)
         _, predicted = outputs.max(1)
         val_total += targets.size(0)
@@ -111,7 +113,7 @@ def main():
             optim = torch.optim.Adam(model.parameters())
         criterion = nn.CrossEntropyLoss()
 
-        model.train()
+        #model.train()
         start_time = time.time()
         for i in range(num_epochs):
             train_total, train_correct = 0,0
@@ -124,10 +126,11 @@ def main():
                 loss.backward()
                 optim.step()
                 _, predicted = outputs.max(1)
-                train_total += targets.size(0)
-                train_correct += predicted.eq(targets).sum().item()
+                train_total = targets.size(0)
+                train_correct = predicted.eq(targets).sum().item()
                 print("\r", end='')
                 print(f'training {100 * idx / len(train_loader):.2f}%: {train_correct / train_total:.3f}', end='')
+
             ckpt_data = {
                 'net': model.state_dict(),
                 'model': model_name,
