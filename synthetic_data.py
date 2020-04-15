@@ -16,6 +16,7 @@ import torchvision.transforms as transforms
 from PIL import Image
 
 from utils import *
+from transform import *
 
 IMAGES_PER_CLASS = 500
 NUM_CLASSES = 200
@@ -75,18 +76,6 @@ def main():
     # Create the training data generator
     im_height = 64
     im_width = 64
-
-    # Key:      name of transformation
-    # Value:    [tuple] (transform, frac. images to transform)
-    #           e.g.    (transforms.Compose(...), 0.2)
-    data_transforms = dict() 
-
-    data_transforms['flip'] = (transforms.Compose([
-        transforms.RandomHorizontalFlip(p=1.0),
-        transforms.ToTensor(),
-        ]),
-        0.01
-    )
 
     class_map = map_classes(source_dir)
     transform_dir = pathlib.Path('./data/tiny-imagenet-transformed') / 'train'
