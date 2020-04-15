@@ -76,6 +76,7 @@ def main():
 
     # Create a pytorch dataset
     data_dir = pathlib.Path('./data/tiny-imagenet-200')
+    trans_data_dir = pathlib.Path('./data/tiny-imagenet-transformed')
     image_count = len(list(data_dir.glob('**/*.JPEG')))
     training_image_count = len(list(data_dir.glob('train/**/*.JPEG')))
     CLASS_NAMES = np.array([item.name for item in (data_dir / 'train').glob('*')])
@@ -106,7 +107,9 @@ def main():
     else:        
         assert len(args.models) <= 1, "If training, do not pass in more than one model."
         train_set = torchvision.datasets.ImageFolder(data_dir / 'train', data_transforms)
-        train_loader = torch.utils.data.DataLoader(train_set, batch_size=batch_size,
+        flip_set = torchvision.datasets.ImageFolder(trans_data_dir / 'train' / 'flip', data_transforms)
+        dataset = torch.utils.data.ConcatDataset([train_set, flip_set])
+        train_loader = torch.utils.data.DataLoader(dataset, batch_size=batch_size,
                                                    shuffle=True, num_workers=4, pin_memory=True)
 
         if len(args.models) == 0:
