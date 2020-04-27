@@ -86,7 +86,8 @@ def main():
     num_batches = NUM_CLASSES
 
     for transformation in args.transforms:
-        if data_transforms.get(transformation):
+        if data_transforms.get(transformation) == None:
+            continue
 
         data_transform, sampling_rate = data_transforms[transformation]
 

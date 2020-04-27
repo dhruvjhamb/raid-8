@@ -28,14 +28,26 @@ data_transforms['jitter'] = (transforms.Compose([
 )
 
 data_transforms['rotate10to15'] = (transforms.Compose([
+    transforms.Pad(32, padding_mode='reflect'),
+    transforms.RandomRotation(degrees=(10,20), resample=Image.BICUBIC),
+    transforms.CenterCrop(64),
+    transforms.ToTensor(),
+    ]),
+    0.01
+)
+
+data_transforms['rotate20to30'] = (transforms.Compose([
+    transforms.Pad(32, padding_mode='reflect'),
     transforms.RandomRotation(degrees=(10,15), resample=Image.BICUBIC),
+    transforms.RandomRotation(degrees=(20,30), resample=Image.BICUBIC),
     transforms.ToTensor(),
     ]),
     1
 )
-
-data_transforms['rotate20to30'] = (transforms.Compose([
-    transforms.RandomRotation(degrees=(20,30), resample=Image.BICUBIC),
+data_transforms['rotate30to45'] = (transforms.Compose([
+    transforms.Pad(32, padding_mode='reflect'),
+    transforms.RandomRotation(degrees=(10,15), resample=Image.BICUBIC),
+    transforms.RandomRotation(degrees=(30,45), resample=Image.BICUBIC),
     transforms.ToTensor(),
     ]),
     1

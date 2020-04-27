@@ -25,6 +25,7 @@ def try_rmdir(dir_path):
 def ask_yes_no(question, max_tries=5, default=True):
     for _ in range(max_tries):
         reply = str(input(question + ' (y/n): ')).lower().strip()
+        if len(reply) == 0: continue
         if reply[0] == 'y':
             return True
         if reply[0] == 'n':
