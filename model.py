@@ -46,6 +46,7 @@ def ResNetFineTuned(num_classes, im_height, im_width):
 	# 	param.requires_grad = False
 	ct = 0
 	for name, child in resnet.named_children():
+		print(name, child)
 	    ct += 1
 	    if ct < 5:
 	        for name2, params in resnet.named_parameters():
