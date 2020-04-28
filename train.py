@@ -115,11 +115,15 @@ def main():
                 transform_dir = trans_data_dir / 'train' / transformation
                 print ("Reading transformed data from {}".format(transform_dir))
                 trans_set = torchvision.datasets.ImageFolder(transform_dir, data_transforms)
+                print ("Read {} transformed samples"
+                        .format( len(trans_set) ))
                 datasets.append(trans_set)
             except:
                 print ("Reading transformed data FAILED, this data may not exist or may have a different name")
 
         complete_dataset = torch.utils.data.ConcatDataset(datasets)
+        print('Discovered {} training samples (original and transformed)'
+                .format( len(complete_dataset) ))
         train_loader = torch.utils.data.DataLoader(complete_dataset, batch_size=batch_size,
                                                    shuffle=True, num_workers=4, pin_memory=True)
 
