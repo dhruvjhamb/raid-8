@@ -56,7 +56,7 @@ def ResNetFineTuned(num_classes, im_height, im_width):
     return resnet
 
 def ResNextFineTuned(num_classes, im_heigh, im_width):
-    resnext50_32x4d = models.resnext50_32x4d(pretrained=True)
+    resnext50_32x4d = torchvision.models.resnext50_32x4d(pretrained=True)
     ct = 0
     for name, child in resnext50_32x4d.named_children():
         ct += 1
