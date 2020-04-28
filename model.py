@@ -49,10 +49,12 @@ def ResNetFineTuned(num_classes, im_height, im_width):
 	    ct += 1
 	    if ct < 5:
 	        for name2, params in resnet.named_parameters():
-	        	params.requires_grad = False
-	num_features = resnet.fc.in_features
-	resnet.fc = nn.Linear(num_features, num_classes)
-	return resnet
+                        print(name2)
+                        params.requires_grad = False
+	print(ct)
+        num_features = resnet.fc.in_features
+        resnet.fc = nn.Linear(num_features, num_classes)
+        return resnet
 
 str_to_net = {
 	'net': Net,
