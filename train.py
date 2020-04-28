@@ -110,16 +110,17 @@ def main():
         assert len(args.models) <= 1, "If training, do not pass in more than one model."
         train_set = torchvision.datasets.ImageFolder(data_dir / 'train', data_transforms)
         datasets = [train_set]
-        for transformation in args.transforms:
-            try:
-                transform_dir = trans_data_dir / 'train' / transformation
-                print ("Reading transformed data from {}".format(transform_dir))
-                trans_set = torchvision.datasets.ImageFolder(transform_dir, data_transforms)
-                print ("Read {} transformed samples"
-                        .format( len(trans_set) ))
-                datasets.append(trans_set)
-            except:
-                print ("Reading transformed data FAILED, this data may not exist or may have a different name")
+        if args.transforms != None:
+            for transformation in args.transforms:
+                try:
+                    transform_dir = trans_data_dir / 'train' / transformation
+                    print ("Reading transformed data from {}".format(transform_dir))
+                    trans_set = torchvision.datasets.ImageFolder(transform_dir, data_transforms)
+                    print ("Read {} transformed samples"
+                            .format( len(trans_set) ))
+                    datasets.append(trans_set)
+                except:
+                    print ("Reading transformed data FAILED, this data may not exist or may have a different name")
 
         complete_dataset = torch.utils.data.ConcatDataset(datasets)
         print('Discovered {} training samples (original and transformed)'
