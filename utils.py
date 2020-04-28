@@ -1,5 +1,6 @@
 import os
 import shutil
+import time
 
 def proper_order(path):
     tokens = path.split('_')
@@ -32,3 +33,21 @@ def ask_yes_no(question, max_tries=5, default=True):
             return False
     return default
 
+# Performance
+
+class Timer:
+    def __init__(self):
+        self.start_t = -1
+        self.task = ""
+    def start(self, task: str):
+        self.start_t = time.time()
+        self.task = task
+    def end(self):
+        if self.start_t == -1:
+            print("start() was never called!")
+        else:
+            print("Task {} has finished in {} seconds"
+                    .format(self.task,
+                        time.time() - self.start_t))
+            self.start_t = -1
+            self.task = ""
