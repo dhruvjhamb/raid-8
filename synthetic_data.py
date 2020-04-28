@@ -61,7 +61,10 @@ def get_concat_h(im1_path, im2_path, gap=20):
     return dst
 
 def main():
+    # Initialize arguments and timer
     args = _parse() 
+    timer = Timer()
+
     if not _validate_args(args):
         return
 
@@ -116,6 +119,9 @@ def main():
             num_generated_samples)        
 
         for idx, (inputs, targets) in enumerate(train_loader):
+            print("\r", end='')
+            print(f'Generating transformed images from class {(idx + 1):.0f}', end='')
+
             assert(pairwise_equal(targets))
             target = targets[0].item()
             class_name = class_map[target]
@@ -139,7 +145,9 @@ def main():
                 if generation_indices[idx][gen_idx] == 1:    
                     # Concatenate source and transformed image, and display the result
                     get_concat_h(source_path / img_name, img_path).show()
+
         
+
         if num_generated_samples > 0 and \
             not ask_yes_no("Do you want to keep the generated images"):
             print ("Removing images...")
