@@ -129,7 +129,7 @@ def main():
     data_transforms = transforms.Compose([
         transforms.Resize((im_height, im_width), interpolation=interpolation),
         transforms.ToTensor(),
-        transforms.Normalize((0.485, 0.456, 0.406), tuple(np.sqrt((0.229, 0.224, 0.255)))),
+        #transforms.Normalize((0.485, 0.456, 0.406), tuple(np.sqrt((0.229, 0.224, 0.255)))),
     ])
 
     if args.val:

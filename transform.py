@@ -62,7 +62,7 @@ data_transforms['rotate30to45'] = (transforms.Compose([
     transforms.CenterCrop(64),
     transforms.ToTensor(),
     ]),
-    1
+    0.5
 )
 
 data_transforms['flip-gaussian'] = (transforms.Compose([
