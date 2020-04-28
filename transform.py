@@ -50,7 +50,7 @@ data_transforms['rotate30to45'] = (transforms.Compose([
     transforms.RandomRotation(degrees=(30,45), resample=Image.BICUBIC),
     transforms.ToTensor(),
     ]),
-    1
+    0.5
 )
 
 data_transforms['perspective'] = (transforms.Compose([
