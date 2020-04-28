@@ -16,6 +16,7 @@ import torchvision.transforms as transforms
 from PIL import Image
 
 from utils import *
+from transform import *
 
 IMAGES_PER_CLASS = 500
 NUM_CLASSES = 200
@@ -24,6 +25,8 @@ def _parse():
     parser = argparse.ArgumentParser(description='Train or validate predefined models.')
     parser.add_argument('--overwrite', action='store_true')
     parser.add_argument('--generate_samples', type=int, default=0)
+    parser.add_argument('--transforms', metavar='transform',
+            type=str, nargs='*')
     return parser.parse_args()
 
 def _validate_args(args):
@@ -76,32 +79,30 @@ def main():
     im_height = 64
     im_width = 64
 
-    # Key:      name of transformation
-    # Value:    [tuple] (transform, frac. images to transform)
-    #           e.g.    (transforms.Compose(...), 0.2)
-    data_transforms = dict() 
-
-    data_transforms['flip'] = (transforms.Compose([
-        transforms.RandomHorizontalFlip(p=1.0),
-        transforms.ToTensor(),
-        ]),
-        0.01
-    )
-
     class_map = map_classes(source_dir)
     transform_dir = pathlib.Path('./data/tiny-imagenet-transformed') / 'train'
 
     batch_size = IMAGES_PER_CLASS
     num_batches = NUM_CLASSES
-    for transformation in data_transforms.keys():
+
+    for transformation in args.transforms:
+        if data_transforms.get(transformation) == None:
+            continue
+
+        data_transform, sampling_rate = data_transforms[transformation]
+
         curr_transform_dir = transform_dir / transformation
         if args.overwrite:
             print ("Overwriting transformed images at {}".format(str(curr_transform_dir)))
             try_rmdir(curr_transform_dir)
+        else:
+            print ("Generating transformed images at {}".format(str(curr_transform_dir)))
         try_mkdir(curr_transform_dir)
 
+        # If sampling rate is 0, do NOT do this transformation
+        if sampling_rate == 0: continue
+
         # Read in and transform all images
-        data_transform, sampling_rate = data_transforms[transformation]
         num_generated_samples = args.generate_samples
 
         train_set = torchvision.datasets.ImageFolder(source_dir, data_transform)
