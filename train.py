@@ -30,7 +30,22 @@ def parse():
     parser.add_argument('models', metavar='model', type=str, nargs='*')
     parser.add_argument('--transforms', metavar='transform',
             type=str, nargs='*')
+    parser.add_argument('--weights', metavar='transweights',
+            type=float, nargs='*')
     return parser.parse_args()
+
+def reweightDatasets(datasets, weights):
+    reweighted = []
+    source_samples = len(datasets[0])
+    for index, dataset in enumerate(datasets):
+        target_samples = int(source_samples * weights[index])
+        curr_samples = len(dataset)
+        indices = np.random.permutation(curr_samples)[:target_samples]
+
+        reweighted.append(
+                torch.utils.data.Subset(dataset, indices)
+                )
+    return reweighted
 
 def validate(data_dir, data_transforms, num_classes,
     im_height, im_width, checkpoint=None, model=None):
@@ -121,6 +136,8 @@ def main():
                     datasets.append(trans_set)
                 except:
                     print ("Reading transformed data FAILED, this data may not exist or may have a different name")
+        if args.weights != None:
+            datasets = reweightDatasets(datasets, [1] + args.weights)
 
         complete_dataset = torch.utils.data.ConcatDataset(datasets)
         print('Discovered {} training samples (original and transformed)'
