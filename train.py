@@ -55,7 +55,7 @@ def getInterpolationMethod(interpolation):
         "bicubic": PIL.Image.BICUBIC,
         "lanczos": PIL.Image.LANCZOS,
         "bilinear": PIL.Image.BILINEAR}
-    if mapping.get(interpolation) == None:
+    if interpolation == None or mapping.get(interpolation) == None:
         print ("Using default interpolation (bicubic)")
         result = mapping["bicubic"]
     print ("Using {} interpolation".format(interpolation))
@@ -141,20 +141,12 @@ def main():
 
     im_height = 224
     im_width = 224
-    print(args.interpolate)
-    if args.interpolate is not None:
-        interpolation = getInterpolationMethod(args.interpolate)
-        data_transforms = transforms.Compose([
-            transforms.Resize((im_height, im_width), interpolation=interpolation),
-            transforms.ToTensor(),
-            #transforms.Normalize((0.485, 0.456, 0.406), tuple(np.sqrt((0.229, 0.224, 0.255)))),
-        ])
-    else:
-        data_transforms = transforms.Compose([
-            transforms.Resize((im_height, im_width)),
-            transforms.ToTensor(),
-            #transforms.Normalize((0.485, 0.456, 0.406), tuple(np.sqrt((0.229, 0.224, 0.255)))),
-        ])
+    interpolation = getInterpolationMethod(args.interpolate)
+    data_transforms = transforms.Compose([
+        transforms.Resize((im_height, im_width), interpolation=interpolation),
+        transforms.ToTensor(),
+        #transforms.Normalize((0.485, 0.456, 0.406), tuple(np.sqrt((0.229, 0.224, 0.255)))),
+    ])
 
     if args.val:
         validate(data_dir, data_transforms, len(CLASS_NAMES),
