@@ -26,7 +26,7 @@ def parse():
     parser = argparse.ArgumentParser(description='Train or validate predefined models.')
     parser.add_argument('--val', action='store_true')
     parser.add_argument('--data', type=float, default=1.0)
-    parser.add_argument('--checkpoint', type=str, default='latest.pt')
+    parser.add_argument('--checkpoint', type=str, default='latest.pt', nargs='+')
     parser.add_argument('models', metavar='model', type=str, nargs='*')
     parser.add_argument('--transforms', metavar='transform',
             type=str, nargs='*')
@@ -42,26 +42,41 @@ def validate(data_dir, data_transforms, num_classes,
     val_loader = torch.utils.data.DataLoader(val_set, batch_size=128, num_workers=4, pin_memory=True, shuffle=True)
 
     if model == None:
-        ckpt_dir = pathlib.Path('./checkpoints')
-        ckpt = torch.load(ckpt_dir / checkpoint)
-        model = str_to_net[ckpt['model']](num_classes, im_height, im_width)
+        temporary_models = []
+        for cpt in checkpoint:
+            ckpt_dir = './checkpoints/'
+            ckpt = torch.load(ckpt_dir + cpt, map_location=device)
+            model = str_to_net[ckpt['model']](num_classes, im_height, im_width)
 
-        model.load_state_dict(ckpt['net'])
-        model.eval()
-        print ("Number of parameters: {}, Time: {}, User: {}"
-                        .format(ckpt['num_params'], ckpt['runtime'], ckpt['machine'])) 
+            model.load_state_dict(ckpt['net'])
+            model.eval()
+            print ("Number of parameters: {}, Time: {}, User: {}"
+                            .format(ckpt['num_params'], ckpt['runtime'], ckpt['machine'])) 
+            temporary_models.append(model)
+        model = temporary_models
 
+    else:
+        model = [model]
+
+    for mod in model:
     # For GPU
-    if device.type == 'cuda':
-        model.to(device)
+        if device.type == 'cuda':
+            mod.to(device)
+        mod.eval()
 
-    model.eval()
     val_total, val_correct = 0, 0
     for idx, (inputs, targets) in enumerate(val_loader):
-        outputs = model(inputs.to(device))
-        _, predicted = outputs.max(1)
+        all_predictions = None
+        for mod in model:
+            outputs = mod(inputs.to(device))
+            _, predicted = outputs.max(1)
+            if all_predictions is None:
+                all_predictions = predicted.view(1, predicted.shape[0])
+            else:
+                all_predictions = torch.cat((all_predictions, predicted.view(1, predicted.shape[0])), 0)
+        popular_vote = torch.mode(all_predictions, dim=0)[0]
         val_total += targets.size(0)
-        val_correct += predicted.eq(targets.to(device)).sum().item()
+        val_correct += popular_vote.eq(targets.to(device)).sum().item()
         print("\r", end='')
         print(f'validation {100 * idx / len(val_loader):.2f}%: {val_correct / val_total:.3f}', end='')
 
