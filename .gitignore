@@ -6,6 +6,7 @@ data/tiny-imagenet-transformed/*
 data/tiny-imagenet-transformed/train/*
 !data/tiny-imagenet-transformed/train/README.txt
 checkpoints/
+logs/
 *.pt
 __pycache__/
 *.DS_Store

@@ -28,12 +28,13 @@ def parse():
     parser.add_argument('--val', action='store_true')
     parser.add_argument('--data', type=float, default=1.0)
     parser.add_argument('--checkpoint', type=str, default='latest.pt', nargs='+')
-    parser.add_argument('--interpolate', type=str)
+    parser.add_argument('--interpolate', type=str, nargs="?")
     parser.add_argument('models', metavar='model', type=str, nargs='*')
     parser.add_argument('--transforms', metavar='transform',
             type=str, nargs='*')
     parser.add_argument('--weights', metavar='transweights',
             type=float, nargs='*')
+    parser.add_argument('--logfile', metavar=str, nargs="?")
     return parser.parse_args()
 
 def reweightDatasets(datasets, weights):
@@ -140,12 +141,20 @@ def main():
 
     im_height = 224
     im_width = 224
-    interpolation = getInterpolationMethod(args.interpolate)
-    data_transforms = transforms.Compose([
-        transforms.Resize((im_height, im_width), interpolation=interpolation),
-        transforms.ToTensor(),
-        transforms.Normalize((0.485, 0.456, 0.406), tuple(np.sqrt((0.229, 0.224, 0.255)))),
-    ])
+    print(args.interpolate)
+    if args.interpolate is not None:
+        interpolation = getInterpolationMethod(args.interpolate)
+        data_transforms = transforms.Compose([
+            transforms.Resize((im_height, im_width), interpolation=interpolation),
+            transforms.ToTensor(),
+            #transforms.Normalize((0.485, 0.456, 0.406), tuple(np.sqrt((0.229, 0.224, 0.255)))),
+        ])
+    else:
+        data_transforms = transforms.Compose([
+            transforms.Resize((im_height, im_width)),
+            transforms.ToTensor(),
+            #transforms.Normalize((0.485, 0.456, 0.406), tuple(np.sqrt((0.229, 0.224, 0.255)))),
+        ])
 
     if args.val:
         validate(data_dir, data_transforms, len(CLASS_NAMES),
@@ -203,6 +212,14 @@ def main():
 
         model.train()
         start_time = time.time()
+
+        if args.logfile is not None:
+            if not os.path.exists('./logs/'):
+                os.makedirs('./logs/')
+
+            f = open("./logs/" + args.logfile + ".txt", "w+")
+            f.write("Model Name: {} \n".format(model_name))
+
         for i in range(num_epochs):
             print ("Epoch {}...".format(i))
             train_total, train_correct = [],[]
@@ -228,6 +245,8 @@ def main():
                 print("\r", end='')
                 print(f'training {100 * idx / len(train_loader):.2f}%: {100 * moving_avg:.2f}', end='')
 
+            val_acc = validate(data_dir, data_transforms, len(CLASS_NAMES), im_height, im_width, model=model)
+
             ckpt_data = {
                 'net': model.state_dict(),
                 'model': model_name,
@@ -236,8 +255,7 @@ def main():
                 'timestamp': start_time,
                 'epoch': i + 1,
                 'machine': getpass.getuser(),
-                'validation_acc': validate(data_dir, data_transforms,
-                    len(CLASS_NAMES), im_height, im_width, model=model),
+                'validation_acc': val_acc,
             }
             
             checkpoint_dir = pathlib.Path('./checkpoints') / ckpt_data['model']
@@ -249,7 +267,15 @@ def main():
                 ckpt_data['timestamp'], ckpt_data['epoch'])
             torch.save(ckpt_data, checkpoint_dir / ckpt_file)
 
+            # write metrics to text file if logfile arg not None
+            if args.logfile is not None:
+                f.write("Epoch {} \n".format(ckpt_data['epoch']))
+                f.write("Validation Accuracy: {} \n".format(ckpt_data['validation_acc']))
+
             print ()
+
+        if args.logfile is not None:
+            f.close()
 
 if __name__ == '__main__':
     main()
