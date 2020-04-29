@@ -205,7 +205,7 @@ def main():
             for name, param in model.named_parameters():
                 if param.requires_grad:
                     params.append(param)
-            optim = torch.optim.Adam(params)
+            optim = torch.optim.Adam(model.optim_params)
         else:
             optim = torch.optim.Adam(model.parameters())
         criterion = nn.CrossEntropyLoss()

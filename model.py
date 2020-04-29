@@ -3,6 +3,7 @@ import torchvision
 import torchvision.transforms as transforms
 import torch.nn.functional as F
 from torch import nn
+from utils import *
 
 class Net(nn.Module):
     def __init__(self, num_classes, im_height, im_width):
@@ -45,12 +46,22 @@ def ResNetFineTuned(num_classes, im_height, im_width):
     # for param in resnet.parameters():
     #   param.requires_grad = False
     ct = 0
+    resnet.optim_params = []
+    lrs = [0, 1e-3, 1e-2]
+    partitions = [4, 1, 1]
+    partition_assignment = partitionList(
+            sum([1 for _ in resnet.named_children()]), partitions)
     for name, child in resnet.named_children():
+        partition = partition_assignment[ct]
+        for param_name, params in child.named_parameters():
+            print(param_name)
+            if lrs[partition] == 0:
+                params.requires_grad = False
+            else:
+                optim_params = {'params': params}
+                optim_params['lr'] = lrs[partition]
+                resnet.optim_params.append(optim_params)
         ct += 1
-        if ct < 5:
-            for name2, params in resnet.named_parameters():
-                        print(name2)
-                        params.requires_grad = False
     num_features = resnet.fc.in_features
     resnet.fc = nn.Linear(num_features, num_classes)
     return resnet
