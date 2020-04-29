@@ -17,6 +17,7 @@ import torchvision
 import torchvision.transforms as transforms
 from model import *
 import time
+import PIL
 
 from torch import nn
 
@@ -27,10 +28,38 @@ def parse():
     parser.add_argument('--val', action='store_true')
     parser.add_argument('--data', type=float, default=1.0)
     parser.add_argument('--checkpoint', type=str, default='latest.pt', nargs='+')
+    parser.add_argument('--interpolate', type=str)
     parser.add_argument('models', metavar='model', type=str, nargs='*')
     parser.add_argument('--transforms', metavar='transform',
             type=str, nargs='*')
+    parser.add_argument('--weights', metavar='transweights',
+            type=float, nargs='*')
     return parser.parse_args()
+
+def reweightDatasets(datasets, weights):
+    reweighted = []
+    source_samples = len(datasets[0])
+    for index, dataset in enumerate(datasets):
+        target_samples = int(source_samples * weights[index])
+        curr_samples = len(dataset)
+        indices = np.random.permutation(curr_samples)[:target_samples]
+
+        reweighted.append(
+                torch.utils.data.Subset(dataset, indices)
+                )
+    return reweighted
+
+def getInterpolationMethod(interpolation):
+    mapping = {"hamming": PIL.Image.HAMMING,
+        "bicubic": PIL.Image.BICUBIC,
+        "lanczos": PIL.Image.LANCZOS,
+        "bilinear": PIL.Image.BILINEAR}
+    if mapping.get(interpolation) == None:
+        print ("Using default interpolation (bicubic)")
+        result = mapping["bicubic"]
+    print ("Using {} interpolation".format(interpolation))
+    result = mapping[interpolation]
+    return result
 
 def validate(data_dir, data_transforms, num_classes,
     im_height, im_width, checkpoint=None, model=None):
@@ -111,8 +140,9 @@ def main():
 
     im_height = 224
     im_width = 224
+    interpolation = getInterpolationMethod(args.interpolate)
     data_transforms = transforms.Compose([
-        transforms.Resize((im_height, im_width)),
+        transforms.Resize((im_height, im_width), interpolation=interpolation),
         transforms.ToTensor(),
         transforms.Normalize((0.485, 0.456, 0.406), tuple(np.sqrt((0.229, 0.224, 0.255)))),
     ])
@@ -136,6 +166,8 @@ def main():
                     datasets.append(trans_set)
                 except:
                     print ("Reading transformed data FAILED, this data may not exist or may have a different name")
+        if args.weights != None:
+            datasets = reweightDatasets(datasets, [1] + args.weights)
 
         complete_dataset = torch.utils.data.ConcatDataset(datasets)
         print('Discovered {} training samples (original and transformed)'
