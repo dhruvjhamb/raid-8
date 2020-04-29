@@ -17,6 +17,7 @@ import torchvision
 import torchvision.transforms as transforms
 from model import *
 import time
+import PIL
 
 from torch import nn
 
@@ -26,11 +27,39 @@ def parse():
     parser = argparse.ArgumentParser(description='Train or validate predefined models.')
     parser.add_argument('--val', action='store_true')
     parser.add_argument('--data', type=float, default=1.0)
-    parser.add_argument('--checkpoint', type=str, default='latest.pt')
+    parser.add_argument('--checkpoint', type=str, default='latest.pt', nargs='+')
+    parser.add_argument('--interpolate', type=str)
     parser.add_argument('models', metavar='model', type=str, nargs='*')
     parser.add_argument('--transforms', metavar='transform',
             type=str, nargs='*')
+    parser.add_argument('--weights', metavar='transweights',
+            type=float, nargs='*')
     return parser.parse_args()
+
+def reweightDatasets(datasets, weights):
+    reweighted = []
+    source_samples = len(datasets[0])
+    for index, dataset in enumerate(datasets):
+        target_samples = int(source_samples * weights[index])
+        curr_samples = len(dataset)
+        indices = np.random.permutation(curr_samples)[:target_samples]
+
+        reweighted.append(
+                torch.utils.data.Subset(dataset, indices)
+                )
+    return reweighted
+
+def getInterpolationMethod(interpolation):
+    mapping = {"hamming": PIL.Image.HAMMING,
+        "bicubic": PIL.Image.BICUBIC,
+        "lanczos": PIL.Image.LANCZOS,
+        "bilinear": PIL.Image.BILINEAR}
+    if mapping.get(interpolation) == None:
+        print ("Using default interpolation (bicubic)")
+        result = mapping["bicubic"]
+    print ("Using {} interpolation".format(interpolation))
+    result = mapping[interpolation]
+    return result
 
 def validate(data_dir, data_transforms, num_classes,
     im_height, im_width, checkpoint=None, model=None):
@@ -42,26 +71,41 @@ def validate(data_dir, data_transforms, num_classes,
     val_loader = torch.utils.data.DataLoader(val_set, batch_size=128, num_workers=4, pin_memory=True, shuffle=True)
 
     if model == None:
-        ckpt_dir = pathlib.Path('./checkpoints')
-        ckpt = torch.load(ckpt_dir / checkpoint)
-        model = str_to_net[ckpt['model']](num_classes, im_height, im_width)
+        temporary_models = []
+        for cpt in checkpoint:
+            ckpt_dir = './checkpoints/'
+            ckpt = torch.load(ckpt_dir + cpt, map_location=device)
+            model = str_to_net[ckpt['model']](num_classes, im_height, im_width)
 
-        model.load_state_dict(ckpt['net'])
-        model.eval()
-        print ("Number of parameters: {}, Time: {}, User: {}"
-                        .format(ckpt['num_params'], ckpt['runtime'], ckpt['machine'])) 
+            model.load_state_dict(ckpt['net'])
+            model.eval()
+            print ("Number of parameters: {}, Time: {}, User: {}"
+                            .format(ckpt['num_params'], ckpt['runtime'], ckpt['machine'])) 
+            temporary_models.append(model)
+        model = temporary_models
 
+    else:
+        model = [model]
+
+    for mod in model:
     # For GPU
-    if device.type == 'cuda':
-        model.to(device)
+        if device.type == 'cuda':
+            mod.to(device)
+        mod.eval()
 
-    model.eval()
     val_total, val_correct = 0, 0
     for idx, (inputs, targets) in enumerate(val_loader):
-        outputs = model(inputs.to(device))
-        _, predicted = outputs.max(1)
+        all_predictions = None
+        for mod in model:
+            outputs = mod(inputs.to(device))
+            _, predicted = outputs.max(1)
+            if all_predictions is None:
+                all_predictions = predicted.view(1, predicted.shape[0])
+            else:
+                all_predictions = torch.cat((all_predictions, predicted.view(1, predicted.shape[0])), 0)
+        popular_vote = torch.mode(all_predictions, dim=0)[0]
         val_total += targets.size(0)
-        val_correct += predicted.eq(targets.to(device)).sum().item()
+        val_correct += popular_vote.eq(targets.to(device)).sum().item()
         print("\r", end='')
         print(f'validation {100 * idx / len(val_loader):.2f}%: {val_correct / val_total:.3f}', end='')
 
@@ -96,8 +140,9 @@ def main():
 
     im_height = 224
     im_width = 224
+    interpolation = getInterpolationMethod(args.interpolate)
     data_transforms = transforms.Compose([
-        transforms.Resize((im_height, im_width)),
+        transforms.Resize((im_height, im_width), interpolation=interpolation),
         transforms.ToTensor(),
         #transforms.Normalize((0.485, 0.456, 0.406), tuple(np.sqrt((0.229, 0.224, 0.255)))),
     ])
@@ -121,6 +166,8 @@ def main():
                     datasets.append(trans_set)
                 except:
                     print ("Reading transformed data FAILED, this data may not exist or may have a different name")
+        if args.weights != None:
+            datasets = reweightDatasets(datasets, [1] + args.weights)
 
         complete_dataset = torch.utils.data.ConcatDataset(datasets)
         print('Discovered {} training samples (original and transformed)'
