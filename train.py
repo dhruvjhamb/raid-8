@@ -27,7 +27,7 @@ def parse():
     parser = argparse.ArgumentParser(description='Train or validate predefined models.')
     parser.add_argument('--val', action='store_true')
     parser.add_argument('--data', type=float, default=1.0)
-    parser.add_argument('--checkpoint', type=str, default='latest.pt', nargs='+')
+    parser.add_argument('--checkpoints', type=str, nargs='+')
     parser.add_argument('--interpolate', type=str, nargs="?")
     parser.add_argument('models', metavar='model', type=str, nargs='*')
     parser.add_argument('--transforms', metavar='transform',
@@ -35,6 +35,13 @@ def parse():
     parser.add_argument('--weights', metavar='transweights',
             type=float, nargs='*')
     parser.add_argument('--logfile', metavar=str, nargs="?")
+    parser.add_argument('--learningrates', metavar='lr',
+            type=float, nargs='*')
+    parser.add_argument('--partitions', metavar='partition',
+            type=float, nargs='*')
+    parser.add_argument('--decayrate', type=int, default=1)
+    parser.add_argument('--decaycoeff', type=float, default=1.0)
+    parser.add_argument('--batchsize', type=int, default=32)
     return parser.parse_args()
 
 def reweightDatasets(datasets, weights):
@@ -62,27 +69,51 @@ def getInterpolationMethod(interpolation):
     result = mapping[interpolation]
     return result
 
+def getModelFromCheckpoint(cpt, args, device):
+    ckpt_dir = './checkpoints/'
+    ckpt = torch.load(ckpt_dir + cpt, map_location=device)
+    model = str_to_net[ckpt['model']](*args)
+
+    model.load_state_dict(ckpt['net'])
+    return model, ckpt['model']
+
+def getModelFromName(model, args):
+    if len(model) == 0:
+        model_name = 'dummy'
+        print ("No model specified, defaulting to {}".format(model_name))
+    elif str_to_net.get( model[0] ) == None:
+        model_name = 'dummy'
+        print ("Model {} does not exist, defaulting to {}".format(model[0],
+            model_name))
+    else:
+        model_name = model[0]
+    return str_to_net[model_name](*args), model_name
+
 def validate(data_dir, data_transforms, num_classes,
     im_height, im_width, checkpoint=None, model=None):
+    
+    load_from_ckpt = (model == None)
 
     # setting device on GPU if available, else CPU
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
+    if load_from_ckpt: batch_size = 16
+    else: batch_size = 128
     val_set = torchvision.datasets.ImageFolder(data_dir / 'val', data_transforms)
-    val_loader = torch.utils.data.DataLoader(val_set, batch_size=128, num_workers=4, pin_memory=True, shuffle=True)
+    val_loader = torch.utils.data.DataLoader(val_set, batch_size=batch_size, num_workers=4, pin_memory=True, shuffle=True)
 
-    if model == None:
+    if load_from_ckpt:
         temporary_models = []
         for cpt in checkpoint:
             ckpt_dir = './checkpoints/'
-            ckpt = torch.load(ckpt_dir + cpt, map_location=device)
-            model = str_to_net[ckpt['model']](num_classes, im_height, im_width)
+            ckpt = torch.load(ckpt_dir + cpt)
+            model = str_to_net[ckpt['model']](num_classes, im_height, im_width, None)
 
             model.load_state_dict(ckpt['net'])
-            model.eval()
             print ("Number of parameters: {}, Time: {}, User: {}"
                             .format(ckpt['num_params'], ckpt['runtime'], ckpt['machine'])) 
             temporary_models.append(model)
+            del ckpt
         model = temporary_models
 
     else:
@@ -94,6 +125,7 @@ def validate(data_dir, data_transforms, num_classes,
             mod.to(device)
         mod.eval()
 
+    torch.cuda.empty_cache()
     val_total, val_correct = 0, 0
     for idx, (inputs, targets) in enumerate(val_loader):
         all_predictions = None
@@ -133,7 +165,7 @@ def main():
         args.data, int(args.data * training_image_count)))
 
     # Create the training data generator
-    batch_size = 32
+    batch_size = args.batchsize
     num_batches = args.data * training_image_count / batch_size
     im_height = 64
     im_width = 64
@@ -158,10 +190,17 @@ def main():
 
     if args.val:
         validate(data_dir, data_transforms, len(CLASS_NAMES),
-            im_height, im_width, checkpoint=args.checkpoint)
+            im_height, im_width, checkpoint=args.checkpoints)
 
     else:        
         assert len(args.models) <= 1, "If training, do not pass in more than one model."
+        if args.checkpoints != None:
+            assert args.checkpoints == None or len(args.checkpoints) <= 1, "If training, do not pass in more than one checkpoint."
+            assert len(args.models) + len(args.checkpoints) <= 1, "Cannot pass in both a model and " \
+                + "a checkpoint."
+        else:
+            args.checkpoints = []
+
         train_set = torchvision.datasets.ImageFolder(data_dir / 'train', data_transforms)
         datasets = [train_set]
         if args.transforms != None:
@@ -184,27 +223,19 @@ def main():
         train_loader = torch.utils.data.DataLoader(complete_dataset, batch_size=batch_size,
                                                    shuffle=True, num_workers=4, pin_memory=True)
 
-        if len(args.models) == 0:
-            model_name = 'dummy'
-            print ("No model specified, defaulting to {}".format(model_name))
-        elif str_to_net.get( args.models[0] ) == None:
-            model_name = 'dummy'
-            print ("Model {} does not exist, defaulting to {}".format(args.models[0],
-                model_name))
+        params = {'lrs': args.learningrates, 'partitions': args.partitions, 'decay_schedule': 
+                {'decay_rate': args.decayrate, 'decay_coeff': args.decaycoeff}}
+        model_args = (len(CLASS_NAMES), im_height, im_width, params)
+        if len(args.checkpoints) == 1:
+            model, model_name = getModelFromCheckpoint(args.checkpoints[0], model_args, device)
         else:
-            model_name = args.models[0]
-        model = str_to_net[model_name](len(CLASS_NAMES), im_height, im_width)
+            model, model_name = getModelFromName(args.models, model_args)
 
         # For GPU
         if device.type == 'cuda':
             model.to(device)
 
-
         if model_name != 'dummy':   # changed from 'alex' to generalize
-            params = []
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    params.append(param)
             optim = torch.optim.Adam(model.optim_params)
         else:
             optim = torch.optim.Adam(model.parameters())
@@ -246,6 +277,8 @@ def main():
                 print(f'training {100 * idx / len(train_loader):.2f}%: {100 * moving_avg:.2f}', end='')
 
             val_acc = validate(data_dir, data_transforms, len(CLASS_NAMES), im_height, im_width, model=model)
+
+            optim = decayLR(optim, i, model)
 
             ckpt_data = {
                 'net': model.state_dict(),

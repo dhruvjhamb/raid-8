@@ -6,7 +6,7 @@ from torch import nn
 from utils import *
 
 class Net(nn.Module):
-    def __init__(self, num_classes, im_height, im_width):
+    def __init__(self, num_classes, im_height, im_width, params):
         super(Net, self).__init__()
         self.conv1 = nn.Conv2d(3, 32, 3, padding=1)
 #       self.conv2 = nn.Conv2d(32, 64, 3, padding=1)
@@ -23,7 +23,7 @@ class Net(nn.Module):
         return x
 
 class DummyNet(nn.Module):
-    def __init__(self, num_classes, im_height, im_width):
+    def __init__(self, num_classes, im_height, im_width, params):
         super(DummyNet, self).__init__()
         self.layer1 = nn.Linear(im_height * im_width * 3, num_classes)
 
@@ -32,7 +32,7 @@ class DummyNet(nn.Module):
         x = self.layer1(x)
         return x
 
-def AlexFineTuned(num_classes, im_height, im_width):
+def AlexFineTuned(num_classes, im_height, im_width, params):
     alexnet = torchvision.models.alexnet(pretrained=True)
     for param in alexnet.parameters():
         param.requires_grad = False
@@ -40,50 +40,66 @@ def AlexFineTuned(num_classes, im_height, im_width):
     alexnet.classifier[6] = nn.Linear(num_features, num_classes)
     return alexnet
 
-def ResNetFineTuned(num_classes, im_height, im_width):
+def ResNetFineTuned(num_classes, im_height, im_width, params):
     # finetuning - https://medium.com/@14prakash/almost-any-image-classification-problem-using-pytorch-i-am-in-love-with-pytorch-26c7aa979ec4
     resnet = torchvision.models.resnet18(pretrained=True)
-    # for param in resnet.parameters():
-    #   param.requires_grad = False
+    return ResNetCommon(resnet, num_classes, params)
+
+def ResNet34FineTuned(num_classes, im_height, im_width, params):
+    resnet = torchvision.models.resnet34(pretrained=True)
+    return ResNetCommon(resnet, num_classes, params)
+
+def ResNextFineTuned(num_classes, im_height, im_width, params):
+    resnext50_32x4d = torchvision.models.resnext50_32x4d(pretrained=True)
+    return ResNetCommon(resnext50_32x4d, num_classes, params)
+
+def ResNetCommon(resnet, num_classes, params):
     ct = 0
     resnet.optim_params = []
-    lrs = [0, 1e-3, 1e-2]
-    partitions = [4, 1, 1]
-    partition_assignment = partitionList(
-            sum([1 for _ in resnet.named_children()]), partitions)
-    for name, child in resnet.named_children():
-        partition = partition_assignment[ct]
-        for param_name, params in child.named_parameters():
-            print(param_name)
-            if lrs[partition] == 0:
-                params.requires_grad = False
-            else:
-                optim_params = {'params': params}
-                optim_params['lr'] = lrs[partition]
-                resnet.optim_params.append(optim_params)
-        ct += 1
+
+    if params != None:
+        # Initialize learning rates
+        lrs = params['lrs']
+        partitions = params['partitions']
+        partition_assignment = partitionList(
+                sum([1 for _ in resnet.named_children()]), partitions)
+
+        # Save other parameters
+        resnet.decay_schedule = params['decay_schedule']
+
+        for name, child in resnet.named_children():
+            partition = partition_assignment[ct]
+            for param_name, params in child.named_parameters():
+                if lrs[partition] == 0:
+                    params.requires_grad = False
+                else:
+                    optim_params = {'params': params}
+                    optim_params['lr'] = lrs[partition]
+                    resnet.optim_params.append(optim_params)
+            ct += 1
+
     num_features = resnet.fc.in_features
     resnet.fc = nn.Linear(num_features, num_classes)
     return resnet
 
-def ResNextFineTuned(num_classes, im_heigh, im_width):
-    resnext50_32x4d = torchvision.models.resnext50_32x4d(pretrained=True)
-    ct = 0
-    for name, child in resnext50_32x4d.named_children():
-        ct += 1
-        #if ct < 5:
-        for name2, params in resnext50_32x4d.named_parameters():
-            params.requires_grad = False
-    print(ct)
-    num_features = resnext50_32x4d.fc.in_features
-    resnext50_32x4d.fc = nn.Linear(num_features, num_classes)
-    return resnext50_32x4d
+#########################################################################
+# DYNAMIC MODEL MODIFICATION
+#########################################################################
+
+def decayLR(optim, epoch, model):
+    decay_rate = model.decay_schedule["decay_rate"]
+    decay = model.decay_schedule["decay_coeff"]
+    if (epoch + 1) % decay_rate == 0:
+        for params_dict in model.optim_params:
+            params_dict['lr'] = decay * params_dict['lr']
+    return torch.optim.Adam(model.optim_params)
 
 str_to_net = {
     'net': Net,
     'dummy': DummyNet,
     'alex': AlexFineTuned,
     'res': ResNetFineTuned,
+    'res34': ResNet34FineTuned,
     'resnext': ResNextFineTuned
 }
 
