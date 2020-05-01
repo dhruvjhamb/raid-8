@@ -4,6 +4,9 @@ import torchvision.transforms as transforms
 import torch.nn.functional as F
 from torch import nn
 from utils import *
+from statistics import pstdev
+
+WINDOW_LENGTH = 3
 
 class Net(nn.Module):
     def __init__(self, num_classes, im_height, im_width, params):
@@ -26,6 +29,8 @@ class DummyNet(nn.Module):
     def __init__(self, num_classes, im_height, im_width, params):
         super(DummyNet, self).__init__()
         self.layer1 = nn.Linear(im_height * im_width * 3, num_classes)
+        self.optim_params = self.parameters()
+        self.decay_schedule = params['decay_schedule']
 
     def forward(self, x):
         x = x.flatten(1)
@@ -86,10 +91,23 @@ def ResNetCommon(resnet, num_classes, params):
 # DYNAMIC MODEL MODIFICATION
 #########################################################################
 
-def decayLR(optim, epoch, model):
+def decayLR(optim, epoch, model, history):
     decay_rate = model.decay_schedule["decay_rate"]
     decay = model.decay_schedule["decay_coeff"]
-    if (epoch + 1) % decay_rate == 0:
+    decay_thres = model.decay_schedule["decay_thres"]
+
+    isDecayEpoch = False
+    if decay == 1:
+        return optim
+    elif decay_thres is not None:
+        if len(history) < WINDOW_LENGTH: return optim
+        if (pstdev(history[-WINDOW_LENGTH:]) < decay_thres):
+            isDecayEpoch = True
+            print("Decaying due to training plateau...")
+    else:
+        isDecayEpoch = ((epoch + 1) % decay_rate == 0)
+
+    if isDecayEpoch:
         for params_dict in model.optim_params:
             params_dict['lr'] = decay * params_dict['lr']
     return torch.optim.Adam(model.optim_params)
