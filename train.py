@@ -45,6 +45,7 @@ def parse():
     parser.add_argument('--decaycoeff', type=float, default=1.0)
     parser.add_argument('--decaythres', type=float)
     parser.add_argument('--batchsize', type=int, default=32)
+    parser.add_argument('--true_epoch', action='store_true')
     return parser.parse_args()
 
 def reweightDatasets(datasets, weights):
@@ -208,11 +209,6 @@ def main():
     print('Training with {} of the dataset ({} training images)'.format(
         args.data, int(args.data * training_image_count)))
 
-    # Create the training data generator
-    batch_size = args.batchsize
-    # If args.data > 1, num_batches will have no impact on training
-    num_batches = args.data * training_image_count / batch_size
-    num_epochs = int(math.ceil(args.data))
 
     im_height, im_width = 224, 224
 
@@ -253,10 +249,21 @@ def main():
             datasets = reweightDatasets(datasets, [1] + args.weights)
 
         complete_dataset = torch.utils.data.ConcatDataset(datasets)
+        complete_data_len = len(complete_dataset)
         print('Discovered {} training samples (original and transformed)'
-                .format( len(complete_dataset) ))
+                .format( complete_data_len ))
+
+        # Create the training data generator
+        batch_size = args.batchsize
         train_loader = torch.utils.data.DataLoader(complete_dataset, batch_size=batch_size,
                                                    shuffle=True, num_workers=4, pin_memory=True)
+
+        # If args.data > 1, num_batches will have no impact on training
+        if args.true_epoch:
+            num_batches = args.data * complete_data_len / batch_size
+        else:
+            num_batches = args.data * training_image_count / batch_size
+        num_epochs = int(math.ceil(args.data))
 
         params = {'lrs': args.learningrates, 
                 'partitions': args.partitions, 
