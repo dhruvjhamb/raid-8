@@ -22,18 +22,29 @@ import PIL
 from torch import nn
 
 TRAINING_MOVING_AVG = 5
+MOVING_AVG_LENGTH = 2
+OVERFIT_THRES = 0.95
 
 def parse():
     parser = argparse.ArgumentParser(description='Train or validate predefined models.')
     parser.add_argument('--val', action='store_true')
     parser.add_argument('--data', type=float, default=1.0)
-    parser.add_argument('--checkpoint', type=str, default='latest.pt', nargs='+')
-    parser.add_argument('--interpolate', type=str)
+    parser.add_argument('--checkpoints', type=str, nargs='+')
+    parser.add_argument('--interpolate', type=str, nargs="?")
     parser.add_argument('models', metavar='model', type=str, nargs='*')
     parser.add_argument('--transforms', metavar='transform',
             type=str, nargs='*')
     parser.add_argument('--weights', metavar='transweights',
             type=float, nargs='*')
+    parser.add_argument('--logfile', metavar=str, nargs="?")
+    parser.add_argument('--learningrates', metavar='lr',
+            type=float, nargs='*')
+    parser.add_argument('--partitions', metavar='partition',
+            type=float, nargs='*')
+    parser.add_argument('--decayrate', type=int, default=1)
+    parser.add_argument('--decaycoeff', type=float, default=1.0)
+    parser.add_argument('--decaythres', type=float)
+    parser.add_argument('--batchsize', type=int, default=32)
     return parser.parse_args()
 
 def reweightDatasets(datasets, weights):
@@ -54,34 +65,100 @@ def getInterpolationMethod(interpolation):
         "bicubic": PIL.Image.BICUBIC,
         "lanczos": PIL.Image.LANCZOS,
         "bilinear": PIL.Image.BILINEAR}
-    if mapping.get(interpolation) == None:
+    if interpolation is None or \
+            mapping.get(interpolation) == None:
         print ("Using default interpolation (bicubic)")
         result = mapping["bicubic"]
-    print ("Using {} interpolation".format(interpolation))
-    result = mapping[interpolation]
+    else:
+        print ("Using {} interpolation".format(interpolation))
+        result = mapping[interpolation]
     return result
+
+def getModelFromCheckpoint(cpt, args, device):
+    ckpt_dir = './checkpoints/'
+    ckpt = torch.load(ckpt_dir + cpt, map_location=device)
+    model = str_to_net[ckpt['model']](*args)
+
+    model.load_state_dict(ckpt['net'])
+    return model, ckpt['model']
+
+def getModelFromName(model, args):
+    if len(model) == 0:
+        model_name = 'dummy'
+        print ("No model specified, defaulting to {}".format(model_name))
+    elif str_to_net.get( model[0] ) == None:
+        model_name = 'dummy'
+        print ("Model {} does not exist, defaulting to {}".format(model[0],
+            model_name))
+    else:
+        model_name = model[0]
+    return str_to_net[model_name](*args), model_name
+
+def saveCheckpoint(ckpt_data):
+    checkpoint_dir = pathlib.Path('./checkpoints') / ckpt_data['model']
+    try_mkdir(pathlib.Path('./checkpoints'))
+    try_mkdir(checkpoint_dir)
+    ckpt_file = '{}-{}.pt'.format(
+        ckpt_data['timestamp'], ckpt_data['epoch'])
+    torch.save(ckpt_data, checkpoint_dir / ckpt_file)
+
+def initializeLogging(logfile, model_name):
+    if logfile is not None:
+        log_dir = pathlib.Path('./logs')
+        try_mkdir(log_dir)
+        file_path = log_dir / (logfile + ".txt")
+
+        f = open(file_path, "w+")
+        f.write("Model Name: {} \n".format(model_name))
+    else:
+        f = None
+    return f
+
+def logCheckpoint(f, ckpt_data):
+    if f == None: return
+    # write metrics to text file if logfile arg not None
+    for key in ckpt_data.keys():
+        if key != "net":
+            output = key + " {}\n"
+            f.write(output.format(ckpt_data[key]))
+    f.write("\n")
+
+def isModelOverfitting(history):
+    if len(history) <= MOVING_AVG_LENGTH + 1:
+        return False
+    avgs = []
+    for i in range(len(history) - MOVING_AVG_LENGTH + 1):
+        window = history[i:i+MOVING_AVG_LENGTH]
+        avgs.append(
+            sum(window) / len(window)
+            )
+    return any([(avgs[-1] < OVERFIT_THRES * window) for window in avgs])
 
 def validate(data_dir, data_transforms, num_classes,
     im_height, im_width, checkpoint=None, model=None):
+    
+    load_from_ckpt = (model == None)
 
     # setting device on GPU if available, else CPU
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
+    if load_from_ckpt: batch_size = 8
+    else: batch_size = 128
     val_set = torchvision.datasets.ImageFolder(data_dir / 'val', data_transforms)
-    val_loader = torch.utils.data.DataLoader(val_set, batch_size=128, num_workers=4, pin_memory=True, shuffle=True)
+    val_loader = torch.utils.data.DataLoader(val_set, batch_size=batch_size, num_workers=4, pin_memory=True, shuffle=True)
 
-    if model == None:
+    if load_from_ckpt:
         temporary_models = []
         for cpt in checkpoint:
             ckpt_dir = './checkpoints/'
-            ckpt = torch.load(ckpt_dir + cpt, map_location=device)
-            model = str_to_net[ckpt['model']](num_classes, im_height, im_width)
+            ckpt = torch.load(ckpt_dir + cpt)
+            model = str_to_net[ckpt['model']](num_classes, im_height, im_width, None)
 
             model.load_state_dict(ckpt['net'])
-            model.eval()
             print ("Number of parameters: {}, Time: {}, User: {}"
                             .format(ckpt['num_params'], ckpt['runtime'], ckpt['machine'])) 
             temporary_models.append(model)
+            del ckpt
         model = temporary_models
 
     else:
@@ -93,6 +170,7 @@ def validate(data_dir, data_transforms, num_classes,
             mod.to(device)
         mod.eval()
 
+    torch.cuda.empty_cache()
     val_total, val_correct = 0, 0
     for idx, (inputs, targets) in enumerate(val_loader):
         all_predictions = None
@@ -112,7 +190,6 @@ def validate(data_dir, data_transforms, num_classes,
     return val_correct / val_total
 
 def main():
-
     # setting device on GPU if available, else CPU
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print('Using device:', device)
@@ -132,14 +209,13 @@ def main():
         args.data, int(args.data * training_image_count)))
 
     # Create the training data generator
-    batch_size = 32
+    batch_size = args.batchsize
+    # If args.data > 1, num_batches will have no impact on training
     num_batches = args.data * training_image_count / batch_size
-    im_height = 64
-    im_width = 64
     num_epochs = int(math.ceil(args.data))
 
-    im_height = 224
-    im_width = 224
+    im_height, im_width = 224, 224
+
     interpolation = getInterpolationMethod(args.interpolate)
     data_transforms = transforms.Compose([
         transforms.Resize((im_height, im_width), interpolation=interpolation),
@@ -149,10 +225,17 @@ def main():
 
     if args.val:
         validate(data_dir, data_transforms, len(CLASS_NAMES),
-            im_height, im_width, checkpoint=args.checkpoint)
+            im_height, im_width, checkpoint=args.checkpoints)
 
     else:        
         assert len(args.models) <= 1, "If training, do not pass in more than one model."
+        if args.checkpoints != None:
+            assert args.checkpoints == None or len(args.checkpoints) <= 1, "If training, do not pass in more than one checkpoint."
+            assert len(args.models) + len(args.checkpoints) <= 1, "Cannot pass in both a model and " \
+                + "a checkpoint."
+        else:
+            args.checkpoints = []
+
         train_set = torchvision.datasets.ImageFolder(data_dir / 'train', data_transforms)
         datasets = [train_set]
         if args.transforms != None:
@@ -175,34 +258,33 @@ def main():
         train_loader = torch.utils.data.DataLoader(complete_dataset, batch_size=batch_size,
                                                    shuffle=True, num_workers=4, pin_memory=True)
 
-        if len(args.models) == 0:
-            model_name = 'dummy'
-            print ("No model specified, defaulting to {}".format(model_name))
-        elif str_to_net.get( args.models[0] ) == None:
-            model_name = 'dummy'
-            print ("Model {} does not exist, defaulting to {}".format(args.models[0],
-                model_name))
+        params = {'lrs': args.learningrates, 
+                'partitions': args.partitions, 
+                'decay_schedule': {
+                    'decay_rate': args.decayrate,
+                    'decay_coeff': args.decaycoeff,
+                    'decay_thres': args.decaythres
+                    }
+                }
+
+        model_args = (len(CLASS_NAMES), im_height, im_width, params)
+        if len(args.checkpoints) == 1:
+            model, model_name = getModelFromCheckpoint(args.checkpoints[0], model_args, device)
         else:
-            model_name = args.models[0]
-        model = str_to_net[model_name](len(CLASS_NAMES), im_height, im_width)
+            model, model_name = getModelFromName(args.models, model_args)
 
         # For GPU
         if device.type == 'cuda':
             model.to(device)
 
-
-        if model_name != 'dummy':   # changed from 'alex' to generalize
-            params = []
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    params.append(param)
-            optim = torch.optim.Adam(params)
-        else:
-            optim = torch.optim.Adam(model.parameters())
+        optim = torch.optim.Adam(model.optim_params)
         criterion = nn.CrossEntropyLoss()
-
         model.train()
         start_time = time.time()
+
+        f = initializeLogging(args.logfile, model_name)
+
+        val_history = []
         for i in range(num_epochs):
             print ("Epoch {}...".format(i))
             train_total, train_correct = [],[]
@@ -228,6 +310,10 @@ def main():
                 print("\r", end='')
                 print(f'training {100 * idx / len(train_loader):.2f}%: {100 * moving_avg:.2f}', end='')
 
+            val_acc = validate(data_dir, data_transforms, len(CLASS_NAMES), im_height, im_width, model=model)
+            val_history.append(val_acc)
+            optim = decayLR(optim, i, model, val_history)
+
             ckpt_data = {
                 'net': model.state_dict(),
                 'model': model_name,
@@ -236,20 +322,17 @@ def main():
                 'timestamp': start_time,
                 'epoch': i + 1,
                 'machine': getpass.getuser(),
-                'validation_acc': validate(data_dir, data_transforms,
-                    len(CLASS_NAMES), im_height, im_width, model=model),
+                'validation_acc': val_acc,
             }
             
-            checkpoint_dir = pathlib.Path('./checkpoints') / ckpt_data['model']
-            if not os.path.isdir(pathlib.Path('./checkpoints')):
-                os.mkdir(pathlib.Path('./checkpoints'))
-            if not os.path.isdir(checkpoint_dir):
-                os.mkdir(checkpoint_dir)
-            ckpt_file = '{}-{}.pt'.format(
-                ckpt_data['timestamp'], ckpt_data['epoch'])
-            torch.save(ckpt_data, checkpoint_dir / ckpt_file)
-
+            saveCheckpoint(ckpt_data)
+            logCheckpoint(f, ckpt_data)
             print ()
+            if isModelOverfitting(val_history):
+                break
+
+        if f is not None:
+            f.close()
 
 if __name__ == '__main__':
     main()
