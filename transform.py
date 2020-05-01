@@ -65,6 +65,15 @@ data_transforms['rotate30to45'] = (transforms.Compose([
     0.5
 )
 
+data_transforms['rotateWithin45'] = (transforms.Compose([
+    transforms.Pad(32, padding_mode='reflect'),
+    transforms.RandomRotation(degrees=(-45,45), resample=Image.BICUBIC),
+    transforms.CenterCrop(64),
+    transforms.ToTensor(),
+    ]),
+    1
+)
+
 data_transforms['flip-gaussian'] = (transforms.Compose([
     transforms.RandomHorizontalFlip(p=1.0),
     transforms.ToTensor(),
