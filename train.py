@@ -315,7 +315,7 @@ def main():
                 moving_avg = sum(train_correct) / sum(train_total)
 
                 print("\r", end='')
-                print(f'training {100 * idx / len(train_loader):.2f}%: {100 * moving_avg:.2f}', end='')
+                print(f'[{100 * idx / len(train_loader):.2f}%] acc: {100 * moving_avg:.2f}, loss: {loss:.2f}', end='')
 
             val_acc = validate(data_dir, data_transforms, len(CLASS_NAMES), im_height, im_width, model=model)
             val_history.append(val_acc)
