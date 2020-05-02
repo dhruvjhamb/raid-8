@@ -10,6 +10,8 @@ import getpass
 import argparse
 import os
 import math
+from statistics import multimode
+from random import sample
 
 import numpy as np
 import torch
@@ -135,8 +137,15 @@ def isModelOverfitting(history):
             )
     return any([(avgs[-1] < OVERFIT_THRES * window) for window in avgs])
 
+def sampleMode(predictions):
+    samples = []
+    for model_pred in predictions:
+        modes = multimode(model_pred)
+        samples.append(sample(modes, 1)[0])
+    return samples
+
 def validate(data_dir, data_transforms, num_classes,
-    im_height, im_width, checkpoint=None, model=None):
+    im_height, im_width, checkpoint=None, model=None, random_choice=False):
     
     load_from_ckpt = (model == None)
 
@@ -173,6 +182,7 @@ def validate(data_dir, data_transforms, num_classes,
 
     torch.cuda.empty_cache()
     val_total, val_correct = 0, 0
+    
     for idx, (inputs, targets) in enumerate(val_loader):
         all_predictions = None
         for mod in model:
@@ -182,9 +192,16 @@ def validate(data_dir, data_transforms, num_classes,
                 all_predictions = predicted.view(1, predicted.shape[0])
             else:
                 all_predictions = torch.cat((all_predictions, predicted.view(1, predicted.shape[0])), 0)
-        popular_vote = torch.mode(all_predictions, dim=0)[0]
+
+        if random_choice:
+            np_predictions = np.transpose(all_predictions.cpu().data.numpy())
+            popular_vote = sampleMode(np_predictions)
+            val_correct += np.sum(np.equal(popular_vote, targets.cpu().data.numpy()))
+        else:
+            popular_vote = torch.mode(all_predictions, dim=0)[0]
+            val_correct += popular_vote.eq(targets.to(device)).sum().item()
         val_total += targets.size(0)
-        val_correct += popular_vote.eq(targets.to(device)).sum().item()
+
         print("\r", end='')
         print(f'validation {100 * idx / len(val_loader):.2f}%: {val_correct / val_total:.3f}', end='')
 
