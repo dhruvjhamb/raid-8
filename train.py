@@ -68,8 +68,12 @@ def getInterpolationMethod(interpolation):
         "bicubic": PIL.Image.BICUBIC,
         "lanczos": PIL.Image.LANCZOS,
         "bilinear": PIL.Image.BILINEAR}
+<<<<<<< HEAD
     if interpolation is None or \
             mapping.get(interpolation) == None:
+=======
+    if interpolation == None or mapping.get(interpolation) == None:
+>>>>>>> 9bbf7c0efc4ef3e8b12bed034e5fd5694e4d510d
         print ("Using default interpolation (bicubic)")
         result = mapping["bicubic"]
     else:
