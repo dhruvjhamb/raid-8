@@ -84,7 +84,15 @@ def ResNetCommon(resnet, num_classes, params):
             ct += 1
 
     num_features = resnet.fc.in_features
-    resnet.fc = nn.Linear(num_features, num_classes)
+    #resnet.fc = nn.Linear(num_features, num_classes)
+
+    resnet.blocks = nn.Sequential(
+        nn.Linear(num_features, num_classes),
+        nn.Dropout(p=0.5),
+        nn.ReLU(inplace=True),
+        nn.Linear(num_classes, num_classes)
+    )
+
     return resnet
 
 #########################################################################
