@@ -24,6 +24,7 @@ NUM_CLASSES = 200
 def _parse():
     parser = argparse.ArgumentParser(description='Train or validate predefined models.')
     parser.add_argument('--overwrite', action='store_true')
+    parser.add_argument('--save_transformations', action='store_true')
     parser.add_argument('--generate_samples', type=int, default=0)
     parser.add_argument('--transforms', metavar='transform',
             type=str, nargs='*')
@@ -85,8 +86,13 @@ def main():
     class_map = map_classes(source_dir)
     transform_dir = pathlib.Path('./data/tiny-imagenet-transformed') / 'train'
 
-    batch_size = IMAGES_PER_CLASS
     num_batches = NUM_CLASSES
+    shuffle = (not args.save_transformations)
+    num_generated_samples = args.generate_samples
+    if args.save_transformations: 
+        batch_size = IMAGES_PER_CLASS
+    else:
+        batch_size = num_generated_samples
 
     for transformation in args.transforms:
         if data_transforms.get(transformation) == None:
@@ -94,7 +100,11 @@ def main():
 
         data_transform, sampling_rate = data_transforms[transformation]
 
-        curr_transform_dir = transform_dir / transformation
+        if args.save_transformations:
+            curr_transform_dir = transform_dir / transformation
+        else:
+            curr_transform_dir = transform_dir / "tmp"
+
         if args.overwrite:
             print ("Overwriting transformed images at {}".format(str(curr_transform_dir)))
             try_rmdir(curr_transform_dir)
@@ -105,24 +115,26 @@ def main():
         # If sampling rate is 0, do NOT do this transformation
         if sampling_rate == 0: continue
 
-        # Read in and transform all images
-        num_generated_samples = args.generate_samples
 
         train_set = torchvision.datasets.ImageFolder(source_dir, data_transform)
         train_loader = torch.utils.data.DataLoader(train_set, batch_size=batch_size,
                                                    shuffle=False, num_workers=1, pin_memory=True)
 
         curr_target = -1
-        num_permutations = int(sampling_rate * batch_size)
+        if args.save_transformations:
+            num_permutations = int(sampling_rate * batch_size)
+        else:
+            num_permutations = num_generated_samples
 
         generation_indices = get_generation_indices(num_batches, num_permutations,
             num_generated_samples)        
 
+        # Read in and transform all images
         for idx, (inputs, targets) in enumerate(train_loader):
             print("\r", end='')
             print(f'Generating transformed images from class {(idx + 1):.0f}', end='')
-
-            assert(pairwise_equal(targets))
+            
+            if args.save_transformations: assert(pairwise_equal(targets))
             target = targets[0].item()
             class_name = class_map[target]
 
@@ -142,14 +154,17 @@ def main():
                 img_path = images_path / img_name
                 torchvision.utils.save_image(inputs[index.item()], img_path)
 
-                if generation_indices[idx][gen_idx] == 1:    
+                if generation_indices[idx][gen_idx] == 1 or \
+                        not args.save_transformations:    
                     # Concatenate source and transformed image, and display the result
                     get_concat_h(source_path / img_name, img_path).show()
+            
+            if not args.save_transformations: break
 
         
 
-        if num_generated_samples > 0 and \
-            not ask_yes_no("Do you want to keep the generated images"):
+        if not args.save_transformations or (num_generated_samples > 0 and \
+            not ask_yes_no("Do you want to keep the generated images")):
             print ("Removing images...")
             try_rmdir(curr_transform_dir)
             
