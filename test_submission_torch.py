@@ -4,17 +4,22 @@ from PIL import Image
 import numpy as np
 import torch
 import torchvision.transforms as transforms
-from model import Net
+from model import *
 
+# current todos:
+# not sure if allowed to import models from different file?
+# ensemble will need to be implemented here
 
 def main():
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     # Load the classes
     data_dir = pathlib.Path('./data/tiny-imagenet-200/train/')
     CLASSES = sorted([item.name for item in data_dir.glob('*')])
     im_height, im_width = 64, 64
 
-    ckpt = torch.load('latest.pt')
-    model = Net(len(CLASSES), im_height, im_width)
+    ckpt = torch.load('./checkpoints/resnet/1586833409.8824692-1.pt', map_location=device)
+    # model = Net(len(CLASSES), im_height, im_width)
+    model = str_to_net[ckpt['model']](len(CLASSES), im_height, im_width)
     model.load_state_dict(ckpt['net'])
     model.eval()
 
