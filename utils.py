@@ -1,6 +1,7 @@
 import os
 import shutil
 import time
+import math
 
 def proper_order(path):
     tokens = path.split('_')
@@ -20,6 +21,22 @@ def try_mkdir(dir_path):
 def try_rmdir(dir_path):
     if os.path.isdir(dir_path):
         shutil.rmtree(dir_path)
+
+# Partitioning
+
+def partitionList(num_elements, partitions):
+    multiplier = num_elements / sum(partitions)
+    partitions = [int(p * multiplier) for p in partitions]
+    for i in range(num_elements - sum(partitions)):
+        partitions[i] += 1
+    
+    assignment = []
+    for label, partition in enumerate(partitions):
+        assignment.extend([label] * partition)
+
+    assert(len(assignment) == num_elements)
+    return assignment
+
 
 # User interface 
 
