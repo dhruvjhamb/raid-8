@@ -1,3 +1,5 @@
+experiment.sh
+conda_requirements.txt
 data/*
 !data/get_data.sh
 !data/tiny-imagenet-transformed
@@ -10,5 +12,3 @@ logs/
 *.pt
 __pycache__/
 *.DS_Store
-experiment.sh
-conda_requirements.txt
