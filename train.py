@@ -20,6 +20,7 @@ import time
 import PIL
 
 from torch import nn
+from transform import ImageDropout
 
 TRAINING_MOVING_AVG = 5
 MOVING_AVG_LENGTH = 2
@@ -217,6 +218,14 @@ def main():
     im_height, im_width = 224, 224
 
     interpolation = getInterpolationMethod(args.interpolate)
+
+    train_data_transforms = transforms.Compose([
+        transforms.Resize((im_height, im_width), interpolation=interpolation),
+        transforms.ToTensor(),
+        ImageDropout(0.01),
+        #transforms.Normalize((0.485, 0.456, 0.406), tuple(np.sqrt((0.229, 0.224, 0.255)))),
+    ])
+
     data_transforms = transforms.Compose([
         transforms.Resize((im_height, im_width), interpolation=interpolation),
         transforms.ToTensor(),
@@ -236,7 +245,7 @@ def main():
         else:
             args.checkpoints = []
 
-        train_set = torchvision.datasets.ImageFolder(data_dir / 'train', data_transforms)
+        train_set = torchvision.datasets.ImageFolder(data_dir / 'train', train_data_transforms)
         datasets = [train_set]
         if args.transforms != None:
             for transformation in args.transforms:

@@ -3,6 +3,7 @@ import torch
 import torchvision
 import torchvision.transforms as transforms
 from PIL import Image
+import random
 
 from utils import *
 from transform import *
@@ -17,6 +18,33 @@ class GaussianNoise(object):
     
     def __repr__(self):
         return self.__class__.__name__ + '(mean={0}, std={1})'.format(self.mean, self.std)
+
+class ImageDropout:
+    def __init__(self, p):
+        self.p = p
+
+    def __call__(self, x):
+        print('sep')
+        # print('means')
+        mean_0 = torch.mean(x[0])
+        mean_1 = torch.mean(x[1])
+        mean_2 = torch.mean(x[2])
+        # print(len(x))
+        # print(len(x[0]))
+        # print(len(x[0][0]))
+
+        # print(mean_0)
+        # print(mean_1)
+        # print(mean_2)
+        print(x)
+        for i in range(len(x[0])):
+            for j in range(len(x[0][i])):
+                #if random.uniform(0, 1) < self.p:
+                x[0][i][j] = mean_0
+                x[1][i][j] = mean_1
+                x[2][i][j] = mean_2
+        # print(x)
+        return x
 
 # Transforms file
 # Key:      name of transformation
