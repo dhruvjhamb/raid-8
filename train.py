@@ -10,7 +10,6 @@ import getpass
 import argparse
 import os
 import math
-from statistics import multimode
 from random import sample
 
 import numpy as np
@@ -137,12 +136,12 @@ def isModelOverfitting(history):
             )
     return any([(avgs[-1] < OVERFIT_THRES * window) for window in avgs])
 
-def sampleMode(predictions):
-    samples = []
-    for model_pred in predictions:
-        modes = multimode(model_pred)
-        samples.append(sample(modes, 1)[0])
-    return samples
+# def sampleMode(predictions):
+#     samples = []
+#     for model_pred in predictions:
+#         modes = multimode(model_pred)
+#         samples.append(sample(modes, 1)[0])
+#     return samples
 
 def validate(data_dir, data_transforms, num_classes,
     im_height, im_width, checkpoint=None, model=None, random_choice=False):
@@ -161,7 +160,7 @@ def validate(data_dir, data_transforms, num_classes,
         temporary_models = []
         for cpt in checkpoint:
             ckpt_dir = './checkpoints/'
-            ckpt = torch.load(ckpt_dir + cpt)
+            ckpt = torch.load(ckpt_dir + cpt, map_location=device)
             model = str_to_net[ckpt['model']](num_classes, im_height, im_width, None)
 
             model.load_state_dict(ckpt['net'])
@@ -193,13 +192,13 @@ def validate(data_dir, data_transforms, num_classes,
             else:
                 all_predictions = torch.cat((all_predictions, predicted.view(1, predicted.shape[0])), 0)
 
-        if random_choice:
-            np_predictions = np.transpose(all_predictions.cpu().data.numpy())
-            popular_vote = sampleMode(np_predictions)
-            val_correct += np.sum(np.equal(popular_vote, targets.cpu().data.numpy()))
-        else:
-            popular_vote = torch.mode(all_predictions, dim=0)[0]
-            val_correct += popular_vote.eq(targets.to(device)).sum().item()
+        # if random_choice:
+        #     np_predictions = np.transpose(all_predictions.cpu().data.numpy())
+        #     popular_vote = sampleMode(np_predictions)
+        #     val_correct += np.sum(np.equal(popular_vote, targets.cpu().data.numpy()))
+        # else:
+        popular_vote = torch.mode(all_predictions, dim=0)[0]
+        val_correct += popular_vote.eq(targets.to(device)).sum().item()
         val_total += targets.size(0)
 
         print("\r", end='')
