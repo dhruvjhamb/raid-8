@@ -31,6 +31,7 @@ def parse():
     parser.add_argument('--val', action='store_true')
     parser.add_argument('--data', type=float, default=1.0)
     parser.add_argument('--checkpoints', type=str, nargs='+')
+    parser.add_argument('--checkpoint_weights', type=float, nargs='+')
     parser.add_argument('--interpolate', type=str, nargs="?")
     parser.add_argument('models', metavar='model', type=str, nargs='*')
     parser.add_argument('--transforms', metavar='transform',
@@ -144,7 +145,7 @@ def isModelOverfitting(history):
 #     return samples
 
 def validate(data_dir, data_transforms, num_classes,
-    im_height, im_width, checkpoint=None, model=None, random_choice=False):
+    im_height, im_width, checkpoint=None, model=None, random_choice=False, weights=None):
     
     load_from_ckpt = (model == None)
 
@@ -173,6 +174,12 @@ def validate(data_dir, data_transforms, num_classes,
     else:
         model = [model]
 
+    if weights == None:
+        weights = np.ones(len(model))/len(model)
+
+    assert len(model) == len(weights), "There must be one weight for each model."
+    assert np.isclose(np.sum(weights), 1), "Weights must sum to 1."
+
     for mod in model:
     # For GPU
         if device.type == 'cuda':
@@ -181,24 +188,31 @@ def validate(data_dir, data_transforms, num_classes,
 
     torch.cuda.empty_cache()
     val_total, val_correct = 0, 0
-    
     for idx, (inputs, targets) in enumerate(val_loader):
-        all_predictions = None
-        for mod in model:
-            outputs = mod(inputs.to(device))
-            _, predicted = outputs.max(1)
-            if all_predictions is None:
-                all_predictions = predicted.view(1, predicted.shape[0])
+        sum_probabilities = None
+        for i in range(len(model)):
+            outputs = model[i](inputs.to(device))
+            probabilites = nn.Softmax(dim=-1)(outputs)
+            weighted_prob = probabilites*weights[i]
+            if sum_probabilities is None:
+                sum_probabilities = weighted_prob
             else:
-                all_predictions = torch.cat((all_predictions, predicted.view(1, predicted.shape[0])), 0)
+                sum_probabilities = sum_probabilities + weighted_prob
+
+        _, predicted = sum_probabilities.max(1)
+        # if all_predictions is None:
+        #     all_predictions = predicted.view(1, predicted.shape[0])
+        # else:
+        #     all_predictions = torch.cat((all_predictions, predicted.view(1, predicted.shape[0])), 0)
 
         # if random_choice:
         #     np_predictions = np.transpose(all_predictions.cpu().data.numpy())
         #     popular_vote = sampleMode(np_predictions)
         #     val_correct += np.sum(np.equal(popular_vote, targets.cpu().data.numpy()))
         # else:
-        popular_vote = torch.mode(all_predictions, dim=0)[0]
-        val_correct += popular_vote.eq(targets.to(device)).sum().item()
+        # popular_vote = torch.mode(all_predictions, dim=0)[0]
+
+        val_correct += predicted.eq(targets.to(device)).sum().item()
         val_total += targets.size(0)
 
         print("\r", end='')
@@ -237,7 +251,7 @@ def main():
 
     if args.val:
         validate(data_dir, data_transforms, len(CLASS_NAMES),
-            im_height, im_width, checkpoint=args.checkpoints)
+            im_height, im_width, checkpoint=args.checkpoints, weights=args.checkpoint_weights)
 
     else:        
         assert len(args.models) <= 1, "If training, do not pass in more than one model."
