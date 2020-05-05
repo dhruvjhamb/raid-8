@@ -144,6 +144,15 @@ def isModelOverfitting(history):
 #         samples.append(sample(modes, 1)[0])
 #     return samples
 
+def k_accuracy(outputs, targets, k):
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    batch_size = targets.to(device).size(0)
+    _, pred = outputs.to(device).topk(k, 1, True, True)
+    pred = pred.t()
+    correct = pred.eq(targets.to(device).view(1, -1).expand_as(pred.to(device)))
+    correct_k = correct[:k].view(-1).float().sum(0, keepdim=True)
+    return correct_k.mul_(100.0 / batch_size).item() / 100.0
+
 def validate(data_dir, data_transforms, num_classes,
     im_height, im_width, checkpoint=None, model=None, random_choice=False, weights=None):
     
@@ -217,6 +226,7 @@ def validate(data_dir, data_transforms, num_classes,
 
         print("\r", end='')
         print(f'validation {100 * idx / len(val_loader):.2f}%: {val_correct / val_total:.3f}', end='')
+        print(f', top-5: {k_accuracy(outputs, targets, 5):.3f}', end='')
 
     return val_correct / val_total
 
