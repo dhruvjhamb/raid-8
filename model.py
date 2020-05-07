@@ -68,6 +68,10 @@ def ResNetCommon(resnet, num_classes, params):
         partitions = params['partitions']
         partition_assignment = partitionList(
                 sum([1 for _ in resnet.named_children()]), partitions)
+        if params.get('bn_lr') == None:
+            bn_lr = 0
+        else:
+            bn_lr = params['bn_lr']
 
         # Save other parameters
         resnet.decay_schedule = params['decay_schedule']
@@ -76,7 +80,13 @@ def ResNetCommon(resnet, num_classes, params):
             partition = partition_assignment[ct]
             for param_name, params in child.named_parameters():
                 if lrs[partition] == 0:
-                    params.requires_grad = False
+                    if "bn" in param_name and \
+                            bn_lr > 0:
+                        optim_params = {'params': params}
+                        optim_params['lr'] = bn_lr
+                        resnet.optim_params.append(optim_params)
+                    else:
+                        params.requires_grad = False
                 else:
                     optim_params = {'params': params}
                     optim_params['lr'] = lrs[partition]

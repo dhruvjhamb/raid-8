@@ -48,6 +48,7 @@ def parse():
     parser.add_argument('--decaythres', type=float)
     parser.add_argument('--batchsize', type=int, default=32)
     parser.add_argument('--true_epoch', action='store_true')
+    parser.add_argument('--batchnorm_lr', type=float)
     return parser.parse_args()
 
 def reweightDatasets(datasets, weights):
@@ -153,7 +154,7 @@ def validate(data_dir, data_transforms, num_classes,
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     if load_from_ckpt: batch_size = 8
-    else: batch_size = 128
+    else: batch_size = 32
     val_set = torchvision.datasets.ImageFolder(data_dir / 'val', data_transforms)
     val_loader = torch.utils.data.DataLoader(val_set, batch_size=batch_size, num_workers=4, pin_memory=True, shuffle=True)
 
@@ -284,6 +285,7 @@ def main():
 
         params = {'lrs': args.learningrates, 
                 'partitions': args.partitions, 
+                'bn_lr': args.batchnorm_lr,
                 'decay_schedule': {
                     'decay_rate': args.decayrate,
                     'decay_coeff': args.decaycoeff,
@@ -315,15 +317,20 @@ def main():
             for idx, (inputs, targets) in enumerate(train_loader):
                 if idx > num_batches:
                     break
+                
+                # copy to gpu
+                inputs = inputs.to(device)
+                targets = targets.to(device)
+
                 # gpu
                 optim.zero_grad()
-                outputs = model(inputs.to(device))
-                loss = criterion(outputs.to(device), targets.to(device))
+                outputs = model(inputs)
+                loss = criterion(outputs, targets)
                 loss.backward()
                 optim.step()
                 _, predicted = outputs.max(1)
                 train_total.append (targets.size(0))
-                train_correct.append (predicted.eq(targets.to(device)).sum().item())
+                train_correct.append (predicted.eq(targets).sum().item())
                 
                 if (len(train_total) > TRAINING_MOVING_AVG):
                     train_total.pop(0)
