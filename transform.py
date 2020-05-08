@@ -3,6 +3,7 @@ import torch
 import torchvision
 import torchvision.transforms as transforms
 from PIL import Image
+import kornia
 
 from utils import *
 from transform import *
@@ -14,9 +15,15 @@ class GaussianNoise(object):
         
     def __call__(self, tensor):
         return tensor + torch.randn(tensor.size()) * self.std + self.mean
-    
-    def __repr__(self):
-        return self.__class__.__name__ + '(mean={0}, std={1})'.format(self.mean, self.std)
+
+class GaussianBlur(object):
+    def __init__(self, kernel_size=(3, 3), sigma=(5., 5.)):
+        self.kernel_size = kernel_size
+        self.sigma = sigma
+        
+    def __call__(self, tensor):
+        tensor = tensor.view((1, tensor.size()[0], tensor.size()[1], tensor.size()[2]))
+        return kornia.filters.gaussian_blur2d(tensor, self.kernel_size, self.sigma)
 
 # Transforms file
 # Key:      name of transformation
@@ -83,6 +90,13 @@ data_transforms['rotateWithin45'] = (transforms.Compose([
     1
 )
 
+data_transforms['blur'] = (transforms.Compose([
+    transforms.ToTensor(),
+    GaussianBlur(),
+    ]),
+    1
+)
+
 data_transforms['flip-gaussian'] = (transforms.Compose([
     transforms.RandomHorizontalFlip(p=1.0),
     transforms.ToTensor(),
@@ -144,3 +158,12 @@ data_transforms['gaussian'] = (transforms.Compose([
     ]),
     1
 )
+
+data_transforms['blur-gaussian'] = (transforms.Compose([
+    transforms.ToTensor(),
+    GaussianBlur(),
+    GaussianNoise(0., 0.05)
+    ]),
+    1
+)
+

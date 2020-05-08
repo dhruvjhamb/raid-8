@@ -10,7 +10,6 @@ import getpass
 import argparse
 import os
 import math
-from statistics import multimode
 from random import sample
 
 import numpy as np
@@ -32,6 +31,7 @@ def parse():
     parser.add_argument('--val', action='store_true')
     parser.add_argument('--data', type=float, default=1.0)
     parser.add_argument('--checkpoints', type=str, nargs='+')
+    parser.add_argument('--checkpoint_weights', type=float, nargs='+')
     parser.add_argument('--interpolate', type=str, nargs="?")
     parser.add_argument('models', metavar='model', type=str, nargs='*')
     parser.add_argument('--transforms', metavar='transform',
@@ -138,15 +138,24 @@ def isModelOverfitting(history):
             )
     return any([(avgs[-1] < OVERFIT_THRES * window) for window in avgs])
 
-def sampleMode(predictions):
-    samples = []
-    for model_pred in predictions:
-        modes = multimode(model_pred)
-        samples.append(sample(modes, 1)[0])
-    return samples
+# def sampleMode(predictions):
+#     samples = []
+#     for model_pred in predictions:
+#         modes = multimode(model_pred)
+#         samples.append(sample(modes, 1)[0])
+#     return samples
+
+# def k_accuracy(outputs, targets, k):
+#     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+#     batch_size = targets.to(device).size(0)
+#     _, pred = outputs.to(device).topk(k, 1, True, True)
+#     pred = pred.t()
+#     correct = pred.eq(targets.to(device).view(1, -1).expand_as(pred.to(device)))
+#     correct_k = correct[:k].view(-1).float().sum(0, keepdim=True)
+#     return correct_k.mul_(100.0 / batch_size).item() / 100.0
 
 def validate(data_dir, data_transforms, num_classes,
-    im_height, im_width, checkpoint=None, model=None, random_choice=False):
+    im_height, im_width, checkpoint=None, model=None, random_choice=False, weights=None):
     
     load_from_ckpt = (model == None)
 
@@ -162,7 +171,7 @@ def validate(data_dir, data_transforms, num_classes,
         temporary_models = []
         for cpt in checkpoint:
             ckpt_dir = './checkpoints/'
-            ckpt = torch.load(ckpt_dir + cpt)
+            ckpt = torch.load(ckpt_dir + cpt, map_location=device)
             model = str_to_net[ckpt['model']](num_classes, im_height, im_width, None)
 
             model.load_state_dict(ckpt['net'])
@@ -175,6 +184,12 @@ def validate(data_dir, data_transforms, num_classes,
     else:
         model = [model]
 
+    if weights == None:
+        weights = np.ones(len(model))/len(model)
+
+    assert len(model) == len(weights), "There must be one weight for each model."
+    assert np.isclose(np.sum(weights), 1), "Weights must sum to 1."
+
     for mod in model:
     # For GPU
         if device.type == 'cuda':
@@ -182,31 +197,32 @@ def validate(data_dir, data_transforms, num_classes,
         mod.eval()
 
     torch.cuda.empty_cache()
-    val_total, val_correct = 0, 0
-    
+    val_total, val_correct, val_topk_correct = 0, 0, 0
+    k=5
     for idx, (inputs, targets) in enumerate(val_loader):
-        all_predictions = None
-        for mod in model:
-            outputs = mod(inputs.to(device))
-            _, predicted = outputs.max(1)
-            if all_predictions is None:
-                all_predictions = predicted.view(1, predicted.shape[0])
+        sum_probabilities = None
+        for i in range(len(model)):
+            outputs = model[i](inputs.to(device))
+            probabilites = (nn.Softmax(dim=-1)(outputs)).to(device)
+            weighted_prob = (probabilites*weights[i]).to(device)
+            if sum_probabilities is None:
+                sum_probabilities = weighted_prob
             else:
-                all_predictions = torch.cat((all_predictions, predicted.view(1, predicted.shape[0])), 0)
+                sum_probabilities = sum_probabilities + weighted_prob
+                sum_probabilities = sum_probabilities.to(device)
 
-        if random_choice:
-            np_predictions = np.transpose(all_predictions.cpu().data.numpy())
-            popular_vote = sampleMode(np_predictions)
-            val_correct += np.sum(np.equal(popular_vote, targets.cpu().data.numpy()))
-        else:
-            popular_vote = torch.mode(all_predictions, dim=0)[0]
-            val_correct += popular_vote.eq(targets.to(device)).sum().item()
+        _, predicted = sum_probabilities.max(1)
+        _, predicted_topk = sum_probabilities.topk(k, 1, True, True)
+        predicted_topk = predicted_topk.t()
+        correct = predicted_topk.eq(targets.to(device).view(1, -1).expand_as(predicted_topk.to(device)))
+        val_topk_correct += correct[:k].view(-1).float().sum(0).item()
+        val_correct += predicted.eq(targets.to(device)).sum().item()
         val_total += targets.size(0)
 
         print("\r", end='')
-        print(f'validation {100 * idx / len(val_loader):.2f}%: {val_correct / val_total:.3f}', end='')
+        print(f'validation {100 * idx / len(val_loader):.2f}% complete top-1: {val_correct / val_total:.3f} top-5: {val_topk_correct / val_total:.3f}', end='')
 
-    return val_correct / val_total
+    return val_correct / val_total, val_topk_correct / val_total
 
 def main():
     # setting device on GPU if available, else CPU
@@ -239,7 +255,7 @@ def main():
 
     if args.val:
         validate(data_dir, data_transforms, len(CLASS_NAMES),
-            im_height, im_width, checkpoint=args.checkpoints)
+            im_height, im_width, checkpoint=args.checkpoints, weights=args.checkpoint_weights)
 
     else:        
         assert len(args.models) <= 1, "If training, do not pass in more than one model."
@@ -313,7 +329,7 @@ def main():
         val_history = []
         for i in range(num_epochs):
             print ("Epoch {}...".format(i))
-            train_total, train_correct = [],[]
+            train_total, train_correct, train_acc = [], [], []
             for idx, (inputs, targets) in enumerate(train_loader):
                 if idx > num_batches:
                     break
@@ -329,9 +345,10 @@ def main():
                 loss.backward()
                 optim.step()
                 _, predicted = outputs.max(1)
+
                 train_total.append (targets.size(0))
                 train_correct.append (predicted.eq(targets).sum().item())
-                
+
                 if (len(train_total) > TRAINING_MOVING_AVG):
                     train_total.pop(0)
                     train_correct.pop(0)
@@ -340,8 +357,10 @@ def main():
 
                 print("\r", end='')
                 print(f'[{100 * idx / len(train_loader):.2f}%] acc: {100 * moving_avg:.2f}, loss: {loss:.2f}', end='')
+                if idx % 100 == 0:
+                    train_acc.append(100. * correct / total)
 
-            val_acc = validate(data_dir, data_transforms, len(CLASS_NAMES), im_height, im_width, model=model)
+            val_acc, top5_acc = validate(data_dir, data_transforms, len(CLASS_NAMES), im_height, im_width, model=model)
             val_history.append(val_acc)
             optim = decayLR(optim, i, model, val_history)
 
@@ -353,7 +372,10 @@ def main():
                 'timestamp': start_time,
                 'epoch': i + 1,
                 'machine': getpass.getuser(),
-                'validation_acc': val_acc,
+                'train_acc': train_acc,
+                'validation_acc': val_acc * 100.,
+                'top5_validation': top5_acc * 100.,
+                'model_args': vars(args),
             }
             
             saveCheckpoint(ckpt_data)
