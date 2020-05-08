@@ -228,7 +228,7 @@ def validate(data_dir, data_transforms, num_classes,
         print(f'validation {100 * idx / len(val_loader):.2f}%: {val_correct / val_total:.3f}', end='')
         print(f', top-5: {k_accuracy(outputs, targets, 5):.3f}', end='')
 
-    return val_correct / val_total
+    return val_correct / val_total, k_accuracy(outputs, targets, 5)
 
 def main():
     # setting device on GPU if available, else CPU
@@ -334,7 +334,7 @@ def main():
         val_history = []
         for i in range(num_epochs):
             print ("Epoch {}...".format(i))
-            train_total, train_correct = [],[]
+            train_total, train_correct, train_acc = [], [], []
             for idx, (inputs, targets) in enumerate(train_loader):
                 if idx > num_batches:
                     break
@@ -345,8 +345,12 @@ def main():
                 loss.backward()
                 optim.step()
                 _, predicted = outputs.max(1)
-                train_total.append (targets.size(0))
-                train_correct.append (predicted.eq(targets.to(device)).sum().item())
+
+                total = targets.size(0)
+                correct = predicted.eq(targets.to(device)).sum().item()
+                
+                train_total.append(total)
+                train_correct.append(correct)
                 
                 if (len(train_total) > TRAINING_MOVING_AVG):
                     train_total.pop(0)
@@ -356,8 +360,10 @@ def main():
 
                 print("\r", end='')
                 print(f'[{100 * idx / len(train_loader):.2f}%] acc: {100 * moving_avg:.2f}, loss: {loss:.2f}', end='')
+                if idx % 100 == 0:
+                    train_acc.append(100. * correct / total)
 
-            val_acc = validate(data_dir, data_transforms, len(CLASS_NAMES), im_height, im_width, model=model)
+            val_acc, top5_acc = validate(data_dir, data_transforms, len(CLASS_NAMES), im_height, im_width, model=model)
             val_history.append(val_acc)
             optim = decayLR(optim, i, model, val_history)
 
@@ -369,7 +375,10 @@ def main():
                 'timestamp': start_time,
                 'epoch': i + 1,
                 'machine': getpass.getuser(),
-                'validation_acc': val_acc,
+                'train_acc': train_acc,
+                'validation_acc': val_acc * 100.,
+                'top5_validation': top5_acc * 100.,
+                'model_args': vars(args),
             }
             
             saveCheckpoint(ckpt_data)
