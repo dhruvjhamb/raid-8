@@ -162,7 +162,7 @@ def validate(data_dir, data_transforms, num_classes,
     # setting device on GPU if available, else CPU
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    if load_from_ckpt: batch_size = 8
+    if load_from_ckpt: batch_size = 4
     else: batch_size = 32
     val_set = torchvision.datasets.ImageFolder(data_dir / 'val', data_transforms)
     val_loader = torch.utils.data.DataLoader(val_set, batch_size=batch_size, num_workers=4, pin_memory=True, shuffle=True)
