@@ -188,7 +188,7 @@ def validate(data_dir, data_transforms, num_classes,
         weights = np.ones(len(model))/len(model)
 
     assert len(model) == len(weights), "There must be one weight for each model."
-    assert np.isclose(np.sum(weights), 1), "Weights must sum to 1."
+    # assert np.isclose(np.sum(weights), 1), "Weights must sum to 1."
 
     for mod in model:
     # For GPU
