@@ -144,14 +144,14 @@ def isModelOverfitting(history):
 #         samples.append(sample(modes, 1)[0])
 #     return samples
 
-def k_accuracy(outputs, targets, k):
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    batch_size = targets.to(device).size(0)
-    _, pred = outputs.to(device).topk(k, 1, True, True)
-    pred = pred.t()
-    correct = pred.eq(targets.to(device).view(1, -1).expand_as(pred.to(device)))
-    correct_k = correct[:k].view(-1).float().sum(0, keepdim=True)
-    return correct_k.mul_(100.0 / batch_size).item() / 100.0
+# def k_accuracy(outputs, targets, k):
+#     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+#     batch_size = targets.to(device).size(0)
+#     _, pred = outputs.to(device).topk(k, 1, True, True)
+#     pred = pred.t()
+#     correct = pred.eq(targets.to(device).view(1, -1).expand_as(pred.to(device)))
+#     correct_k = correct[:k].view(-1).float().sum(0, keepdim=True)
+#     return correct_k.mul_(100.0 / batch_size).item() / 100.0
 
 def validate(data_dir, data_transforms, num_classes,
     im_height, im_width, checkpoint=None, model=None, random_choice=False, weights=None):
@@ -196,39 +196,32 @@ def validate(data_dir, data_transforms, num_classes,
         mod.eval()
 
     torch.cuda.empty_cache()
-    val_total, val_correct = 0, 0
+    val_total, val_correct, val_topk_correct = 0, 0, 0
+    k=5
     for idx, (inputs, targets) in enumerate(val_loader):
         sum_probabilities = None
         for i in range(len(model)):
             outputs = model[i](inputs.to(device))
-            probabilites = nn.Softmax(dim=-1)(outputs)
-            weighted_prob = probabilites*weights[i]
+            probabilites = (nn.Softmax(dim=-1)(outputs)).to(device)
+            weighted_prob = (probabilites*weights[i]).to(device)
             if sum_probabilities is None:
                 sum_probabilities = weighted_prob
             else:
                 sum_probabilities = sum_probabilities + weighted_prob
+                sum_probabilities = sum_probabilities.to(device)
 
         _, predicted = sum_probabilities.max(1)
-        # if all_predictions is None:
-        #     all_predictions = predicted.view(1, predicted.shape[0])
-        # else:
-        #     all_predictions = torch.cat((all_predictions, predicted.view(1, predicted.shape[0])), 0)
-
-        # if random_choice:
-        #     np_predictions = np.transpose(all_predictions.cpu().data.numpy())
-        #     popular_vote = sampleMode(np_predictions)
-        #     val_correct += np.sum(np.equal(popular_vote, targets.cpu().data.numpy()))
-        # else:
-        # popular_vote = torch.mode(all_predictions, dim=0)[0]
-
+        _, predicted_topk = sum_probabilities.topk(k, 1, True, True)
+        predicted_topk = predicted_topk.t()
+        correct = predicted_topk.eq(targets.to(device).view(1, -1).expand_as(predicted_topk.to(device)))
+        val_topk_correct += correct[:k].view(-1).float().sum(0).item()
         val_correct += predicted.eq(targets.to(device)).sum().item()
         val_total += targets.size(0)
 
         print("\r", end='')
-        print(f'validation {100 * idx / len(val_loader):.2f}%: {val_correct / val_total:.3f}', end='')
-        print(f', top-5: {k_accuracy(outputs, targets, 5):.3f}', end='')
+        print(f'validation {100 * idx / len(val_loader):.2f}% complete top-1: {val_correct / val_total:.3f} top-5: {val_topk_correct / val_total:.3f}', end='')
 
-    return val_correct / val_total, k_accuracy(outputs, targets, 5)
+    return val_correct / val_total, val_topk_correct / val_total
 
 def main():
     # setting device on GPU if available, else CPU
