@@ -18,7 +18,8 @@ from PIL import Image
 from utils import *
 from transform import *
 
-IMAGES_PER_CLASS = 500
+TRAINING_IMAGES_PER_CLASS = 500
+VAL_IMAGES_PER_CLASS = 50
 NUM_CLASSES = 200
 
 def _parse():
@@ -28,6 +29,7 @@ def _parse():
     parser.add_argument('--generate_samples', type=int, default=0)
     parser.add_argument('--transforms', metavar='transform',
             type=str, nargs='*')
+    parser.add_argument('--data_type', type=str, default='train')
     return parser.parse_args()
 
 def _validate_args(args):
@@ -71,10 +73,10 @@ def main():
 
     # Create a pytorch dataset
     data_dir = pathlib.Path('./data/tiny-imagenet-200')
-    source_dir = data_dir / 'train'
+    source_dir = data_dir / args.data_type
 
     image_count = len(list(data_dir.glob('**/*.JPEG')))
-    training_image_count = len(list(data_dir.glob('train/**/*.JPEG')))
+    training_image_count = len(list(data_dir.glob(args.data_type + '/**/*.JPEG')))
     CLASS_NAMES = np.array([item.name for item in source_dir.glob('*')])
     print('Discovered {} total images'.format(image_count))
     print('Discovered {} training images'.format(training_image_count))
@@ -84,13 +86,22 @@ def main():
     im_width = 64
 
     class_map = map_classes(source_dir)
-    transform_dir = pathlib.Path('./data/tiny-imagenet-transformed') / 'train'
+    transform_dir = pathlib.Path('./data/tiny-imagenet-transformed') / args.data_type
+
+    if args.data_type == 'val':
+        try_mkdir(transform_dir)
 
     num_batches = NUM_CLASSES
     shuffle = (not args.save_transformations)
     num_generated_samples = args.generate_samples
     if args.save_transformations: 
-        batch_size = IMAGES_PER_CLASS
+        if args.data_type == 'train':
+            batch_size = TRAINING_IMAGES_PER_CLASS
+        elif args.data_type == 'val':
+            batch_size = VAL_IMAGES_PER_CLASS
+        else:
+            print('Not valid data type')
+            return
     else:
         batch_size = num_generated_samples
 
