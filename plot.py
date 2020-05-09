@@ -41,15 +41,15 @@ def main():
         i += 1
     
     fig, ax = plt.subplots()
-    if len(val_dx) == len(val_acc):
-        ax.plot(val_dx, val_acc, label='validation accuracy')
-    else:
-        ax.plot(val_acc, label='validation accuracy')
     # Only plot train and top5 accuracies if all checkpoints had data for them
-    if len(train_acc) == len(val_acc):
+    if len(train_acc) > 0:
         ax.plot(train_acc, label='train accuracy')
+    if len(val_dx) == len(val_acc):
+        ax.plot(val_dx, val_acc, label='validation accuracy', linewidth=8)
+    else:
+        ax.plot(val_acc, label='validation accuracy', linewidth=8)
     if len(top5_acc) == len(val_acc):
-        ax.plot(val_dx, top5_acc, label='top-5 accuracy')
+        ax.plot(val_dx, top5_acc, label='top-5 accuracy', linewidth=8)
     ax.legend()
     ax.set_xlabel('50-iterations', fontsize=16)
     ax.set_ylabel('accuracy', fontsize=16)

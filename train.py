@@ -9,6 +9,7 @@ import pathlib
 import getpass
 import argparse
 import os
+import sys
 import math
 from random import sample
 
@@ -98,13 +99,17 @@ def getModelFromName(model, args):
         model_name = model[0]
     return str_to_net[model_name](*args), model_name
 
-def saveCheckpoint(ckpt_data):
+def getCheckpointFileName(ckpt_data):
     checkpoint_dir = pathlib.Path('./checkpoints') / ckpt_data['model']
     try_mkdir(pathlib.Path('./checkpoints'))
     try_mkdir(checkpoint_dir)
     ckpt_file = '{}-{}.pt'.format(
         ckpt_data['timestamp'], ckpt_data['epoch'])
-    torch.save(ckpt_data, checkpoint_dir / ckpt_file)
+    return checkpoint_dir / ckpt_file
+
+def saveCheckpoint(ckpt_data):
+    filename = getCheckpointFileName(ckpt_data)
+    torch.save(ckpt_data, filename)
 
 def initializeLogging(logfile, model_name):
     if logfile is not None:
@@ -122,7 +127,7 @@ def logCheckpoint(f, ckpt_data):
     if f == None: return
     # write metrics to text file if logfile arg not None
     for key in ckpt_data.keys():
-        if key != "net":
+        if key != "net" and key != "train_acc":
             output = key + " {}\n"
             f.write(output.format(ckpt_data[key]))
     f.write("\n")
@@ -346,8 +351,10 @@ def main():
                 optim.step()
                 _, predicted = outputs.max(1)
 
-                train_total.append (targets.size(0))
-                train_correct.append (predicted.eq(targets).sum().item())
+                total = targets.size(0)
+                correct = predicted.eq(targets).sum().item()
+                train_total.append (total)
+                train_correct.append (correct)
 
                 if (len(train_total) > TRAINING_MOVING_AVG):
                     train_total.pop(0)
@@ -357,8 +364,7 @@ def main():
 
                 print("\r", end='')
                 print(f'[{100 * idx / len(train_loader):.2f}%] acc: {100 * moving_avg:.2f}, loss: {loss:.2f}', end='')
-                if idx % 100 == 0:
-                    train_acc.append(100. * correct / total)
+                train_acc.append(100. * correct / total)
 
             val_acc, top5_acc = validate(data_dir, data_transforms, len(CLASS_NAMES), im_height, im_width, model=model)
             val_history.append(val_acc)
@@ -366,7 +372,9 @@ def main():
 
             ckpt_data = {
                 'net': model.state_dict(),
+                'command': ' '.join(sys.argv),
                 'model': model_name,
+                'checkpoint_file': '', 
                 'num_params': sum(p.numel() for p in model.parameters()),
                 'runtime': time.time() - start_time,
                 'timestamp': start_time,
@@ -377,6 +385,8 @@ def main():
                 'top5_validation': top5_acc * 100.,
                 'model_args': vars(args),
             }
+            filename = str(getCheckpointFileName(ckpt_data))
+            ckpt_data['checkpoint_file'] = filename
             
             saveCheckpoint(ckpt_data)
             logCheckpoint(f, ckpt_data)
