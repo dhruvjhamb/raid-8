@@ -162,6 +162,7 @@ def isModelOverfitting(history):
 def validate(data_dir, data_transforms, num_classes,
     im_height, im_width, checkpoint=None, model=None, random_choice=False, weights=None):
     
+    t = Timer()
     load_from_ckpt = (model == None)
 
     # setting device on GPU if available, else CPU
@@ -201,15 +202,16 @@ def validate(data_dir, data_transforms, num_classes,
             mod.to(device)
         mod.eval()
 
-    torch.cuda.empty_cache()
+    # torch.cuda.empty_cache()
     val_total, val_correct, val_topk_correct = 0, 0, 0
     k=5
     for idx, (inputs, targets) in enumerate(val_loader):
         sum_probabilities = None
+        inputs = inputs.to(device)
         for i in range(len(model)):
-            outputs = model[i](inputs.to(device))
-            probabilites = (nn.Softmax(dim=-1)(outputs)).to(device)
-            weighted_prob = (probabilites*weights[i]).to(device)
+            outputs = model[i](inputs)
+            probabilites = (nn.Softmax(dim=-1)(outputs))#.to(device)
+            weighted_prob = (probabilites*weights[i])#.to(device)
             if sum_probabilities is None:
                 sum_probabilities = weighted_prob
             else:
@@ -324,7 +326,10 @@ def main():
         if device.type == 'cuda':
             model.to(device)
 
-        optim = torch.optim.Adam(model.optim_params)
+        if len(model.optim_params) == 0:
+            optim = torch.optim.Adam(model.parameters())
+        else:
+            optim = torch.optim.Adam(model.optim_params)
         criterion = nn.CrossEntropyLoss()
         model.train()
         start_time = time.time()
@@ -332,6 +337,7 @@ def main():
         f = initializeLogging(args.logfile, model_name)
 
         val_history = []
+        t = Timer()
         for i in range(num_epochs):
             print ("Epoch {}...".format(i))
             train_total, train_correct, train_acc = [], [], []
@@ -391,8 +397,8 @@ def main():
             saveCheckpoint(ckpt_data)
             logCheckpoint(f, ckpt_data)
             print ()
-            if isModelOverfitting(val_history):
-                break
+            # if isModelOverfitting(val_history):
+            #    break
 
         if f is not None:
             f.close()
