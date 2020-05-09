@@ -29,19 +29,27 @@ def main():
     outfile = cptt[0].replace('/', '_')
     epoch = int(cptt[1][:-3])
 
-    i, train_acc, val_acc, top5_acc, val_dx = 1, [], [0], [0], [0]
+    i, train_acc, val_acc, top5_acc, val_dx = 1, [], [None], [None], [0]
     while i <= epoch:
         ckpt = torch.load(ckpt_dir + cptt[0] + '-' + str(i) + '.pt', map_location=torch.device('cuda' if torch.cuda.is_available() else 'cpu'))
-        train_acc.extend(ckpt['train_acc'])
+        if ckpt.get('train_acc') is not None:
+            train_acc.extend(ckpt['train_acc'])
+            val_dx.append(len(ckpt['train_acc']) * i - 1)
         val_acc.append(ckpt['validation_acc'])
-        top5_acc.append(ckpt['top5_validation'])
-        val_dx.append(len(ckpt['train_acc']) * i - 1)
+        if ckpt.get('top5_validation') is not None:
+            top5_acc.append(ckpt['top5_validation'])
         i += 1
     
     fig, ax = plt.subplots()
-    ax.plot(train_acc, label='train accuracy')
-    ax.plot(val_dx, val_acc, label='validation accuracy')
-    ax.plot(val_dx, top5_acc, label='top-5 accuracy')
+    if len(val_dx) == len(val_acc):
+        ax.plot(val_dx, val_acc, label='validation accuracy')
+    else:
+        ax.plot(val_acc, label='validation accuracy')
+    # Only plot train and top5 accuracies if all checkpoints had data for them
+    if len(train_acc) == len(val_acc):
+        ax.plot(train_acc, label='train accuracy')
+    if len(top5_acc) == len(val_acc):
+        ax.plot(val_dx, top5_acc, label='top-5 accuracy')
     ax.legend()
     ax.set_xlabel('50-iterations', fontsize=16)
     ax.set_ylabel('accuracy', fontsize=16)
