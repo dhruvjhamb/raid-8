@@ -127,7 +127,7 @@ def logCheckpoint(f, ckpt_data):
     if f == None: return
     # write metrics to text file if logfile arg not None
     for key in ckpt_data.keys():
-        if key != "net" and key != "train_acc":
+        if key != "net" and key != "train_acc" and key != 'moving_train_acc' and key != 'train_loss':
             output = key + " {}\n"
             f.write(output.format(ckpt_data[key]))
     f.write("\n")
@@ -334,7 +334,7 @@ def main():
         val_history = []
         for i in range(num_epochs):
             print ("Epoch {}...".format(i))
-            train_total, train_correct, train_acc = [], [], []
+            train_total, train_correct, train_acc, moving_train_acc, train_loss = [], [], [], [], []
             for idx, (inputs, targets) in enumerate(train_loader):
                 if idx > num_batches:
                     break
@@ -359,12 +359,14 @@ def main():
                 if (len(train_total) > TRAINING_MOVING_AVG):
                     train_total.pop(0)
                     train_correct.pop(0)
-
+                
                 moving_avg = sum(train_correct) / sum(train_total)
 
                 print("\r", end='')
                 print(f'[{100 * idx / len(train_loader):.2f}%] acc: {100 * moving_avg:.2f}, loss: {loss:.2f}', end='')
+                moving_train_acc.append(100. * moving_avg)
                 train_acc.append(100. * correct / total)
+                train_loss.append(loss)
 
             val_acc, top5_acc = validate(data_dir, data_transforms, len(CLASS_NAMES), im_height, im_width, model=model)
             val_history.append(val_acc)
@@ -380,7 +382,9 @@ def main():
                 'timestamp': start_time,
                 'epoch': i + 1,
                 'machine': getpass.getuser(),
+                'moving_train_acc': moving_train_acc,
                 'train_acc': train_acc,
+                'train_loss': train_loss,
                 'validation_acc': val_acc * 100.,
                 'top5_validation': top5_acc * 100.,
                 'model_args': vars(args),
