@@ -24,7 +24,9 @@ def _parse():
 def main():
     args = _parse() 
     ckpt_dir, cpt = './checkpoints/', args.checkpoint
+    plots_dir = pathlib.Path('./plots')
     cptt = cpt.split('-')
+    outfile = cptt[0].replace('/', '_')
     epoch = int(cptt[1][:-3])
 
     i, train_acc, val_acc, top5_acc, val_dx = 1, [], [0], [0], [0]
@@ -43,7 +45,7 @@ def main():
     ax.legend()
     ax.set_xlabel('50-iterations', fontsize=16)
     ax.set_ylabel('accuracy', fontsize=16)
-    plt.savefig(ckpt_dir + cptt[0] + '.png')
+    plt.savefig(plots_dir / (outfile + '.png'))
 
 if __name__ == '__main__':
     main()
