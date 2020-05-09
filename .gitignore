@@ -6,6 +6,8 @@ data/tiny-imagenet-transformed/*
 !data/tiny-imagenet-transformed/train
 data/tiny-imagenet-transformed/train/*
 !data/tiny-imagenet-transformed/train/README.txt
+plots/*
+!plots/README.txt
 checkpoints/
 logs/
 *.pt
