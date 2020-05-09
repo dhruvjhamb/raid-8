@@ -9,6 +9,7 @@ import pathlib
 import getpass
 import argparse
 import os
+import sys
 import math
 from random import sample
 
@@ -48,6 +49,7 @@ def parse():
     parser.add_argument('--decaythres', type=float)
     parser.add_argument('--batchsize', type=int, default=32)
     parser.add_argument('--true_epoch', action='store_true')
+    parser.add_argument('--batchnorm_lr', type=float)
     return parser.parse_args()
 
 def reweightDatasets(datasets, weights):
@@ -97,13 +99,17 @@ def getModelFromName(model, args):
         model_name = model[0]
     return str_to_net[model_name](*args), model_name
 
-def saveCheckpoint(ckpt_data):
+def getCheckpointFileName(ckpt_data):
     checkpoint_dir = pathlib.Path('./checkpoints') / ckpt_data['model']
     try_mkdir(pathlib.Path('./checkpoints'))
     try_mkdir(checkpoint_dir)
     ckpt_file = '{}-{}.pt'.format(
         ckpt_data['timestamp'], ckpt_data['epoch'])
-    torch.save(ckpt_data, checkpoint_dir / ckpt_file)
+    return checkpoint_dir / ckpt_file
+
+def saveCheckpoint(ckpt_data):
+    filename = getCheckpointFileName(ckpt_data)
+    torch.save(ckpt_data, filename)
 
 def initializeLogging(logfile, model_name):
     if logfile is not None:
@@ -121,7 +127,7 @@ def logCheckpoint(f, ckpt_data):
     if f == None: return
     # write metrics to text file if logfile arg not None
     for key in ckpt_data.keys():
-        if key != "net":
+        if key != "net" and key != "train_acc":
             output = key + " {}\n"
             f.write(output.format(ckpt_data[key]))
     f.write("\n")
@@ -161,8 +167,8 @@ def validate(data_dir, data_transforms, num_classes,
     # setting device on GPU if available, else CPU
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    if load_from_ckpt: batch_size = 8
-    else: batch_size = 128
+    if load_from_ckpt: batch_size = 4
+    else: batch_size = 32
     val_set = torchvision.datasets.ImageFolder(data_dir / 'val', data_transforms)
     val_loader = torch.utils.data.DataLoader(val_set, batch_size=batch_size, num_workers=4, pin_memory=True, shuffle=True)
 
@@ -187,7 +193,7 @@ def validate(data_dir, data_transforms, num_classes,
         weights = np.ones(len(model))/len(model)
 
     assert len(model) == len(weights), "There must be one weight for each model."
-    assert np.isclose(np.sum(weights), 1), "Weights must sum to 1."
+    # assert np.isclose(np.sum(weights), 1), "Weights must sum to 1."
 
     for mod in model:
     # For GPU
@@ -300,6 +306,7 @@ def main():
 
         params = {'lrs': args.learningrates, 
                 'partitions': args.partitions, 
+                'bn_lr': args.batchnorm_lr,
                 'decay_schedule': {
                     'decay_rate': args.decayrate,
                     'decay_coeff': args.decaycoeff,
@@ -331,20 +338,24 @@ def main():
             for idx, (inputs, targets) in enumerate(train_loader):
                 if idx > num_batches:
                     break
+                
+                # copy to gpu
+                inputs = inputs.to(device)
+                targets = targets.to(device)
+
                 # gpu
                 optim.zero_grad()
-                outputs = model(inputs.to(device))
-                loss = criterion(outputs.to(device), targets.to(device))
+                outputs = model(inputs)
+                loss = criterion(outputs, targets)
                 loss.backward()
                 optim.step()
                 _, predicted = outputs.max(1)
 
                 total = targets.size(0)
-                correct = predicted.eq(targets.to(device)).sum().item()
-                
-                train_total.append(total)
-                train_correct.append(correct)
-                
+                correct = predicted.eq(targets).sum().item()
+                train_total.append (total)
+                train_correct.append (correct)
+
                 if (len(train_total) > TRAINING_MOVING_AVG):
                     train_total.pop(0)
                     train_correct.pop(0)
@@ -353,8 +364,7 @@ def main():
 
                 print("\r", end='')
                 print(f'[{100 * idx / len(train_loader):.2f}%] acc: {100 * moving_avg:.2f}, loss: {loss:.2f}', end='')
-                if idx % 100 == 0:
-                    train_acc.append(100. * correct / total)
+                train_acc.append(100. * correct / total)
 
             val_acc, top5_acc = validate(data_dir, data_transforms, len(CLASS_NAMES), im_height, im_width, model=model)
             val_history.append(val_acc)
@@ -362,7 +372,9 @@ def main():
 
             ckpt_data = {
                 'net': model.state_dict(),
+                'command': ' '.join(sys.argv),
                 'model': model_name,
+                'checkpoint_file': '', 
                 'num_params': sum(p.numel() for p in model.parameters()),
                 'runtime': time.time() - start_time,
                 'timestamp': start_time,
@@ -373,6 +385,8 @@ def main():
                 'top5_validation': top5_acc * 100.,
                 'model_args': vars(args),
             }
+            filename = str(getCheckpointFileName(ckpt_data))
+            ckpt_data['checkpoint_file'] = filename
             
             saveCheckpoint(ckpt_data)
             logCheckpoint(f, ckpt_data)

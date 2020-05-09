@@ -1,3 +1,4 @@
+conda_requirements.txt
 data/*
 !data/get_data.sh
 !data/tiny-imagenet-transformed
@@ -5,8 +6,11 @@ data/tiny-imagenet-transformed/*
 !data/tiny-imagenet-transformed/train
 data/tiny-imagenet-transformed/train/*
 !data/tiny-imagenet-transformed/train/README.txt
+plots/*
+!plots/README.txt
 checkpoints/
 logs/
 *.pt
 __pycache__/
 *.DS_Store
+experiment.sh
