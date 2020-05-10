@@ -66,35 +66,32 @@ def ResNetCommon(resnet, num_classes, params):
         # Initialize learning rates
         lrs = params['lrs']
         partitions = params['partitions']
+        partition_assignment = partitionList(
+                sum([1 for _ in resnet.named_children()]), partitions)
+        if params.get('bn_lr') == None:
+            bn_lr = 0
+        else:
+            bn_lr = params['bn_lr']
+
+        # Save other parameters
         resnet.decay_schedule = params['decay_schedule']
-        if partitions is not None:
-            partition_assignment = partitionList(
-                    sum([1 for _ in resnet.named_children()]), partitions)
-            print ("Module partitions:")
-            print (partition_assignment)
-            if params.get('bn_lr') == None:
-                bn_lr = 0
-            else:
-                bn_lr = params['bn_lr']
 
-            # Save other parameters
-
-            for name, child in resnet.named_children():
-                partition = partition_assignment[ct]
-                for param_name, params in child.named_parameters():
-                    if lrs[partition] == 0:
-                        if "bn" in param_name and \
-                                bn_lr > 0:
-                            optim_params = {'params': params}
-                            optim_params['lr'] = bn_lr
-                            resnet.optim_params.append(optim_params)
-                        else:
-                            params.requires_grad = False
-                    else:
+        for name, child in resnet.named_children():
+            partition = partition_assignment[ct]
+            for param_name, params in child.named_parameters():
+                if lrs[partition] == 0:
+                    if "bn" in param_name and \
+                            bn_lr > 0:
                         optim_params = {'params': params}
-                        optim_params['lr'] = lrs[partition]
+                        optim_params['lr'] = bn_lr
                         resnet.optim_params.append(optim_params)
-                ct += 1
+                    else:
+                        params.requires_grad = False
+                else:
+                    optim_params = {'params': params}
+                    optim_params['lr'] = lrs[partition]
+                    resnet.optim_params.append(optim_params)
+            ct += 1
 
     num_features = resnet.fc.in_features
     resnet.fc = nn.Linear(num_features, num_classes)
@@ -105,9 +102,9 @@ def ResNetCommon(resnet, num_classes, params):
 #########################################################################
 
 def decayLR(optim, epoch, model, history):
+    decay_rate = model.decay_schedule["decay_rate"]
     decay = model.decay_schedule["decay_coeff"]
-    decay_rate = model.decay_schedule.get("decay_rate")
-    decay_thres = model.decay_schedule.get("decay_thres")
+    decay_thres = model.decay_schedule["decay_thres"]
 
     isDecayEpoch = False
     if decay == 1:
