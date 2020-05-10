@@ -24,8 +24,9 @@ class ImageDropout:
         self.p = p
 
     def __call__(self, x):
-        print('sep')
+        # print('sep')
         # print('means')
+        return x
         mean_0 = torch.mean(x[0])
         mean_1 = torch.mean(x[1])
         mean_2 = torch.mean(x[2])
@@ -36,7 +37,7 @@ class ImageDropout:
         # print(mean_0)
         # print(mean_1)
         # print(mean_2)
-        print(x)
+        # print(x)
         for i in range(len(x[0])):
             for j in range(len(x[0][i])):
                 #if random.uniform(0, 1) < self.p:
