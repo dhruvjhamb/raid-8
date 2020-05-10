@@ -161,7 +161,7 @@ def isModelOverfitting(history):
 #     return correct_k.mul_(100.0 / batch_size).item() / 100.0
 
 def validate(data_dir, data_transforms, num_classes,
-    im_height, im_width, checkpoint=None, model=None, random_choice=False, weights=None):
+    im_height, im_width, args_transforms=None, checkpoint=None, model=None, random_choice=False, weights=None):
     
     load_from_ckpt = (model == None)
 
@@ -170,7 +170,32 @@ def validate(data_dir, data_transforms, num_classes,
 
     if load_from_ckpt: batch_size = 4
     else: batch_size = 32
-    val_set = torchvision.datasets.ImageFolder(data_dir / 'val', data_transforms)
+
+    if args_transforms != None:
+        trans_data_dir = pathlib.Path('./data/tiny-imagenet-transformed')
+        image_count = len(list(data_dir.glob('**/*.JPEG')))
+        val_image_count = len(list(data_dir.glob('val/**/*.JPEG')))
+        CLASS_NAMES = np.array([item.name for item in (data_dir / 'val').glob('*')])
+
+        val_set = torchvision.datasets.ImageFolder(data_dir / 'val', data_transforms)
+        datasets = [val_set]
+        for transformation in args_transforms:
+            try:
+                transform_dir = trans_data_dir / 'val' / transformation
+                print ("Reading transformed data from {}".format(transform_dir))
+                trans_set = torchvision.datasets.ImageFolder(transform_dir, data_transforms)
+                print ("Read {} transformed samples"
+                        .format( len(trans_set) ))
+                datasets.append(trans_set)
+            except:
+                print ("Reading transformed data FAILED, this data may not exist or may have a different name")
+        if args.weights != None:
+            datasets = reweightDatasets(datasets, [1] + weights)
+
+        val_set = torch.utils.data.ConcatDataset(datasets)
+    else:
+        val_set = torchvision.datasets.ImageFolder(data_dir / 'val', data_transforms)
+    
     val_loader = torch.utils.data.DataLoader(val_set, batch_size=batch_size, num_workers=4, pin_memory=True, shuffle=True)
 
     if load_from_ckpt:
@@ -230,17 +255,24 @@ def validate(data_dir, data_transforms, num_classes,
 
     return val_correct / val_total, val_topk_correct / val_total
 
+
 def cross_validate(data_dir, data_transforms, num_classes,
     im_height, im_width, args, checkpoint=None, model=None, random_choice=False, weights=None):
-    pass
+    if args.transform == None:
+        print('Need to specify transforms')
+        return
+    for i in range(len(args.transforms)):
+        model = train(data_dir, data_transforms, args.transforms[:i] + args.transforms[i+1:], num_classes, im_height, im_width, args)
+        print('Without:', args.transforms[i])
+        print(validate(data_dir, data_transforms, num_classes, im_height, im_width, args_transforms=[args.transforms[i]], model=model))
 
-def train(data_dir, data_transforms, num_classes,
+
+def train(data_dir, data_transforms, args_transforms, num_classes,
     im_height, im_width, args, model=None, random_choice=False):
 
     # setting device on GPU if available, else CPU
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    data_dir = pathlib.Path('./data/tiny-imagenet-200')
     trans_data_dir = pathlib.Path('./data/tiny-imagenet-transformed')
     image_count = len(list(data_dir.glob('**/*.JPEG')))
     training_image_count = len(list(data_dir.glob('train/**/*.JPEG')))
@@ -248,8 +280,8 @@ def train(data_dir, data_transforms, num_classes,
 
     train_set = torchvision.datasets.ImageFolder(data_dir / 'train', data_transforms)
     datasets = [train_set]
-    if args.transforms != None:
-        for transformation in args.transforms:
+    if args_transforms != None:
+        for transformation in args_transforms:
             try:
                 transform_dir = trans_data_dir / 'train' / transformation
                 print ("Reading transformed data from {}".format(transform_dir))
@@ -372,6 +404,8 @@ def train(data_dir, data_transforms, num_classes,
     if f is not None:
         f.close()
 
+    return model
+
 
 def main():
     # setting device on GPU if available, else CPU
@@ -418,7 +452,7 @@ def main():
         else:
             args.checkpoints = []
 
-        train(data_dir, data_transforms, len(CLASS_NAMES),
+        train(data_dir, data_transforms, args_transforms, len(CLASS_NAMES),
             im_height, im_width, args)
 
 if __name__ == '__main__':

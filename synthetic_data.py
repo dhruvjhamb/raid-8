@@ -41,6 +41,8 @@ def _validate_args(args):
 def map_classes(dir_path):
     classes = os.listdir(dir_path)
     classes.sort()
+    if '.DS_Store' in classes:
+        classes.remove('.DS_Store')
     idx_to_class = {i: classes[i] for i in range(len(classes))}
     return idx_to_class
 
