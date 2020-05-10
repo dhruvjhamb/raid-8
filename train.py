@@ -441,6 +441,14 @@ def main():
             im_height, im_width, checkpoint=args.checkpoints, weights=args.checkpoint_weights)
         
     elif args.cross_val:
+        assert len(args.models) <= 1, "If training, do not pass in more than one model."
+        if args.checkpoints != None:
+            assert args.checkpoints == None or len(args.checkpoints) <= 1, "If training, do not pass in more than one checkpoint."
+            assert len(args.models) + len(args.checkpoints) <= 1, "Cannot pass in both a model and " \
+                + "a checkpoint."
+        else:
+            args.checkpoints = []
+            
         cross_validate(data_dir, data_transforms, len(CLASS_NAMES), im_height, im_width, args)
 
     else:        
