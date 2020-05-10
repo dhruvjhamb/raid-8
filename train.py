@@ -258,7 +258,7 @@ def validate(data_dir, data_transforms, num_classes,
 
 def cross_validate(data_dir, data_transforms, num_classes,
     im_height, im_width, args, checkpoint=None, model=None, random_choice=False, weights=None):
-    if args.transform == None:
+    if args.transforms == None:
         print('Need to specify transforms')
         return
     for i in range(len(args.transforms)):
@@ -441,7 +441,7 @@ def main():
             im_height, im_width, checkpoint=args.checkpoints, weights=args.checkpoint_weights)
         
     elif args.cross_val:
-        cross_validate(args)
+        cross_validate(data_dir, data_transforms, len(CLASS_NAMES), im_height, im_width, args)
 
     else:        
         assert len(args.models) <= 1, "If training, do not pass in more than one model."
