@@ -50,6 +50,9 @@ def parse():
     parser.add_argument('--batchsize', type=int, default=32)
     parser.add_argument('--true_epoch', action='store_true')
     parser.add_argument('--batchnorm_lr', type=float)
+    parser.add_argument('--circular_lr', type=float)
+    parser.add_argument('--dropout_rate', type=float)
+    parser.add_argument('--dropout_architecture', type=int, nargs='*')
     return parser.parse_args()
 
 def reweightDatasets(datasets, weights):
@@ -312,8 +315,11 @@ def main():
                 'decay_schedule': {
                     'decay_rate': args.decayrate,
                     'decay_coeff': args.decaycoeff,
-                    'decay_thres': args.decaythres
-                    }
+                    'decay_thres': args.decaythres,
+                    'circular_lr': args.circular_lr,
+                    },
+                'dropout_rate': args.dropout_rate,
+                'dropout_size': args.dropout_architecture,
                 }
 
         model_args = (len(CLASS_NAMES), im_height, im_width, params)
