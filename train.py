@@ -128,7 +128,7 @@ def logCheckpoint(f, ckpt_data):
     if f == None: return
     # write metrics to text file if logfile arg not None
     for key in ckpt_data.keys():
-        if key != "net" and key != "train_acc":
+        if key != "net" and key != "train_acc" and key != 'moving_train_acc' and key != 'train_loss':
             output = key + " {}\n"
             f.write(output.format(ckpt_data[key]))
     f.write("\n")
