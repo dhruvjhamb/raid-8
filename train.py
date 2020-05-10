@@ -256,17 +256,15 @@ def validate(data_dir, data_transforms, num_classes,
     return val_correct / val_total, val_topk_correct / val_total
 
 
-def cross_validate(data_dir, data_transforms, num_classes,
-    im_height, im_width, args, checkpoint=None, model=None, random_choice=False, weights=None):
+def cross_validate(data_dir, data_transforms, num_classes, im_height, im_width, args):
     if args.transforms == None:
         print('Need to specify transforms')
         return
-    print('START')
     for i in range(len(args.transforms)):
-        print('ITERATION:', i)
+        print('Training with:', args.transforms[:i] + args.transforms[i+1:])
         model = train(data_dir, data_transforms, args.transforms[:i] + args.transforms[i+1:], num_classes, im_height, im_width, args, val=False)
-        print('Without:', args.transforms[i])
-        print(validate(data_dir, data_transforms, num_classes, im_height, im_width, args_transforms=[args.transforms[i]], model=model))
+        print('Validation with:', args.transforms[i])
+        validate(data_dir, data_transforms, num_classes, im_height, im_width, args_transforms=[args.transforms[i]], model=model)
 
 
 def train(data_dir, data_transforms, args_transforms, num_classes,
