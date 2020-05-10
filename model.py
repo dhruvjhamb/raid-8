@@ -64,9 +64,14 @@ def ResNetCommon(resnet, num_classes, params):
 
     if params != None:
         # Initialize learning rates
+        resnet.decay_schedule = params['decay_schedule']
         lrs = params['lrs']
         partitions = params['partitions']
-        partition_assignment = partitionList(
+
+        freeze_all = (partitions is None)
+
+        if not freeze_all:
+            partition_assignment = partitionList(
                 sum([1 for _ in resnet.named_children()]), partitions)
         if params.get('bn_lr') == None:
             bn_lr = 0
@@ -74,12 +79,15 @@ def ResNetCommon(resnet, num_classes, params):
             bn_lr = params['bn_lr']
 
         # Save other parameters
-        resnet.decay_schedule = params['decay_schedule']
-
+        
+        if not freeze_all:
+            num_features = resnet.fc.in_features
+            resnet.fc = nn.Linear(num_features, num_classes)
         for name, child in resnet.named_children():
-            partition = partition_assignment[ct]
+            if not freeze_all:
+                partition = partition_assignment[ct]
             for param_name, params in child.named_parameters():
-                if lrs[partition] == 0:
+                if freeze_all or lrs[partition] == 0:
                     if "bn" in param_name and \
                             bn_lr > 0:
                         optim_params = {'params': params}
@@ -92,9 +100,10 @@ def ResNetCommon(resnet, num_classes, params):
                     optim_params['lr'] = lrs[partition]
                     resnet.optim_params.append(optim_params)
             ct += 1
+        if freeze_all:
+            num_features = resnet.fc.in_features
+            resnet.fc = nn.Linear(num_features, num_classes)
 
-    num_features = resnet.fc.in_features
-    resnet.fc = nn.Linear(num_features, num_classes)
     return resnet
 
 #########################################################################
