@@ -264,13 +264,13 @@ def cross_validate(data_dir, data_transforms, num_classes,
     print('START')
     for i in range(len(args.transforms)):
         print('ITERATION:', i)
-        model = train(data_dir, data_transforms, args.transforms[:i] + args.transforms[i+1:], num_classes, im_height, im_width, args)
+        model = train(data_dir, data_transforms, args.transforms[:i] + args.transforms[i+1:], num_classes, im_height, im_width, args, val=False)
         print('Without:', args.transforms[i])
         print(validate(data_dir, data_transforms, num_classes, im_height, im_width, args_transforms=[args.transforms[i]], model=model))
 
 
 def train(data_dir, data_transforms, args_transforms, num_classes,
-    im_height, im_width, args, model=None, random_choice=False):
+    im_height, im_width, args, model=None, random_choice=False, val=True):
 
     # setting device on GPU if available, else CPU
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -375,25 +375,42 @@ def train(data_dir, data_transforms, args_transforms, num_classes,
             print(f'[{100 * idx / len(train_loader):.2f}%] acc: {100 * moving_avg:.2f}, loss: {loss:.2f}', end='')
             train_acc.append(100. * correct / total)
 
-        val_acc, top5_acc = validate(data_dir, data_transforms, len(CLASS_NAMES), im_height, im_width, model=model)
-        val_history.append(val_acc)
-        optim = decayLR(optim, i, model, val_history)
+        if val:
+            val_acc, top5_acc = validate(data_dir, data_transforms, len(CLASS_NAMES), im_height, im_width, model=model)
+            val_history.append(val_acc)
+            optim = decayLR(optim, i, model, val_history)
 
-        ckpt_data = {
-            'net': model.state_dict(),
-            'command': ' '.join(sys.argv),
-            'model': model_name,
-            'checkpoint_file': '', 
-            'num_params': sum(p.numel() for p in model.parameters()),
-            'runtime': time.time() - start_time,
-            'timestamp': start_time,
-            'epoch': i + 1,
-            'machine': getpass.getuser(),
-            'train_acc': train_acc,
-            'validation_acc': val_acc * 100.,
-            'top5_validation': top5_acc * 100.,
-            'model_args': vars(args),
-        }
+            ckpt_data = {
+                'net': model.state_dict(),
+                'command': ' '.join(sys.argv),
+                'model': model_name,
+                'checkpoint_file': '', 
+                'num_params': sum(p.numel() for p in model.parameters()),
+                'runtime': time.time() - start_time,
+                'timestamp': start_time,
+                'epoch': i + 1,
+                'machine': getpass.getuser(),
+                'train_acc': train_acc,
+                'validation_acc': val_acc * 100.,
+                'top5_validation': top5_acc * 100.,
+                'model_args': vars(args),
+            }
+
+        else:
+            ckpt_data = {
+                'net': model.state_dict(),
+                'command': ' '.join(sys.argv),
+                'model': model_name,
+                'checkpoint_file': '', 
+                'num_params': sum(p.numel() for p in model.parameters()),
+                'runtime': time.time() - start_time,
+                'timestamp': start_time,
+                'epoch': i + 1,
+                'machine': getpass.getuser(),
+                'train_acc': train_acc,
+                'model_args': vars(args),
+            }
+
         filename = str(getCheckpointFileName(ckpt_data))
         ckpt_data['checkpoint_file'] = filename
         
