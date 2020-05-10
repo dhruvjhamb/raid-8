@@ -30,7 +30,7 @@ OVERFIT_THRES = 0.95
 def parse():
     parser = argparse.ArgumentParser(description='Train or validate predefined models.')
     parser.add_argument('--val', action='store_true')
-    parser.add_argument('--cross_val', action='store=true')
+    parser.add_argument('--cross_val', action='store_true')
     parser.add_argument('--data', type=float, default=1.0)
     parser.add_argument('--checkpoints', type=str, nargs='+')
     parser.add_argument('--checkpoint_weights', type=float, nargs='+')
@@ -452,7 +452,7 @@ def main():
         else:
             args.checkpoints = []
 
-        train(data_dir, data_transforms, args_transforms, len(CLASS_NAMES),
+        train(data_dir, data_transforms, args.transforms, len(CLASS_NAMES),
             im_height, im_width, args)
 
 if __name__ == '__main__':
