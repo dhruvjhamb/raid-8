@@ -123,7 +123,7 @@ def createDropoutUnit(drop_rate, layer_sizes):
     prev = layer_sizes[0]
     for i, features in enumerate(layer_sizes[1:-1]):
         layers.extend([
-            ('conv{}'.format(i), nn.Linear(prev, features)),
+            ('fc{}'.format(i), nn.Linear(prev, features)),
             ('drop{}'.format(i), nn.Dropout(p=drop_rate)),
             ('relu{}'.format(i), nn.ReLU(inplace=True)),
         ])
