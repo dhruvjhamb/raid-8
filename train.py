@@ -189,7 +189,7 @@ def validate(data_dir, data_transforms, num_classes,
                 datasets.append(trans_set)
             except:
                 print ("Reading transformed data FAILED, this data may not exist or may have a different name")
-        if args.weights != None:
+        if weights != None:
             datasets = reweightDatasets(datasets, [1] + weights)
 
         val_set = torch.utils.data.ConcatDataset(datasets)
@@ -261,7 +261,9 @@ def cross_validate(data_dir, data_transforms, num_classes,
     if args.transforms == None:
         print('Need to specify transforms')
         return
+    print('START')
     for i in range(len(args.transforms)):
+        print('ITERATION:', i)
         model = train(data_dir, data_transforms, args.transforms[:i] + args.transforms[i+1:], num_classes, im_height, im_width, args)
         print('Without:', args.transforms[i])
         print(validate(data_dir, data_transforms, num_classes, im_height, im_width, args_transforms=[args.transforms[i]], model=model))
