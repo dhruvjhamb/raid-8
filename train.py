@@ -260,10 +260,15 @@ def cross_validate(data_dir, data_transforms, num_classes, im_height, im_width, 
     if args.transforms == None:
         print('Need to specify transforms')
         return
+    f = initializeLogging(args.logfile, 'Ensemble')
     for i in range(len(args.transforms)):
         print('Training with:', args.transforms[:i] + args.transforms[i+1:])
         print('Validation with:', args.transforms[i])
-        model = train(data_dir, data_transforms, args.transforms[:i] + args.transforms[i+1:], num_classes, im_height, im_width, args, val_transforms=[args.transforms[i]])
+        f.write('Training with: ' + str(args.transforms[:i] + args.transforms[i+1:]) + '\n')
+        f.write('Validation with: ' + str(args.transforms[i]) + '\n')
+        val_acc, topk_val_acc = validate(data_dir, data_transforms, num_classes, im_height, im_width, checkpoint=args.checkpoints[:i] + args.checkpoints[i+1:], args_transforms=[args.transforms[i]])
+        f.write('Top-1 Validation Accuracy: ' + str(val_acc) + '\n')
+        f.write('Top-5 Validation Accuracy: ' + str(topk_val_acc) + '\n')
 
 
 def train(data_dir, data_transforms, args_transforms, num_classes,
@@ -420,7 +425,10 @@ def main():
     trans_data_dir = pathlib.Path('./data/tiny-imagenet-transformed')
     image_count = len(list(data_dir.glob('**/*.JPEG')))
     training_image_count = len(list(data_dir.glob('train/**/*.JPEG')))
-    CLASS_NAMES = np.array([item.name for item in (data_dir / 'train').glob('*')])
+    CLASS_NAMES = [item.name for item in (data_dir / 'train').glob('*')]
+    if '.DS_Store' in CLASS_NAMES:
+        CLASS_NAMES.remove('.DS_Store')
+    CLASS_NAMES = np.array(CLASS_NAMES)
     print('Discovered {} total images'.format(image_count))
     print('Discovered {} training images'.format(training_image_count))
     print('Training with {} of the dataset ({} training images)'.format(
@@ -441,12 +449,7 @@ def main():
             im_height, im_width, checkpoint=args.checkpoints, weights=args.checkpoint_weights)
         
     elif args.cross_val:
-        assert len(args.models) <= 1, "If training, do not pass in more than one model."
-        if args.checkpoints != None:
-            assert args.checkpoints == None or len(args.checkpoints) <= 1, "If training, do not pass in more than one checkpoint."
-            assert len(args.models) + len(args.checkpoints) <= 1, "Cannot pass in both a model and " \
-                + "a checkpoint."
-        else:
+        if args.checkpoints == None:
             args.checkpoints = []
             
         cross_validate(data_dir, data_transforms, len(CLASS_NAMES), im_height, im_width, args)
