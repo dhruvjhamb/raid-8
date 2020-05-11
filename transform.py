@@ -25,6 +25,34 @@ class GaussianBlur(object):
         tensor = tensor.view((1, tensor.size()[0], tensor.size()[1], tensor.size()[2]))
         return kornia.filters.gaussian_blur2d(tensor, self.kernel_size, self.sigma)
 
+class ImageDropout:
+    def __init__(self, p):
+        self.p = p
+
+    def __call__(self, x):
+        print('SEP')
+        # print('means')
+        print(x.shape)
+        # mean_0 = torch.mean(x[0])
+        # mean_1 = torch.mean(x[1])
+        # mean_2 = torch.mean(x[2])
+        # print(len(x))
+        # print(len(x[0]))
+        # print(len(x[0][0]))
+
+        # print(mean_0)
+        # print(mean_1)
+        # print(mean_2)
+        # print(x)
+        # for i in range(len(x[0])):
+        #     for j in range(len(x[0][i])):
+        #         #if random.uniform(0, 1) < self.p:
+        #         x[0][i][j] = mean_0
+        #         x[1][i][j] = mean_1
+        #         x[2][i][j] = mean_2
+        # print(x)
+        return x
+
 # Transforms file
 # Key:      name of transformation
 # Value:    [tuple] (transform, frac. images to transform)
