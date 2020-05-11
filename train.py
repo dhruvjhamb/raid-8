@@ -51,6 +51,9 @@ def parse():
     parser.add_argument('--batchsize', type=int, default=32)
     parser.add_argument('--true_epoch', action='store_true')
     parser.add_argument('--batchnorm_lr', type=float)
+    parser.add_argument('--circular_lr', type=float)
+    parser.add_argument('--dropout_rate', type=float)
+    parser.add_argument('--dropout_architecture', type=int, nargs='*')
     return parser.parse_args()
 
 def reweightDatasets(datasets, weights):
@@ -163,6 +166,7 @@ def isModelOverfitting(history):
 def validate(data_dir, data_transforms, num_classes,
     im_height, im_width, args_transforms=None, checkpoint=None, model=None, random_choice=False, weights=None):
     
+    t = Timer()
     load_from_ckpt = (model == None)
 
     # setting device on GPU if available, else CPU
@@ -227,15 +231,16 @@ def validate(data_dir, data_transforms, num_classes,
             mod.to(device)
         mod.eval()
 
-    torch.cuda.empty_cache()
+    # torch.cuda.empty_cache()
     val_total, val_correct, val_topk_correct = 0, 0, 0
     k=5
     for idx, (inputs, targets) in enumerate(val_loader):
         sum_probabilities = None
+        inputs = inputs.to(device)
         for i in range(len(model)):
-            outputs = model[i](inputs.to(device))
-            probabilites = (nn.Softmax(dim=-1)(outputs)).to(device)
-            weighted_prob = (probabilites*weights[i]).to(device)
+            outputs = model[i](inputs)
+            probabilites = (nn.Softmax(dim=-1)(outputs))#.to(device)
+            weighted_prob = (probabilites*weights[i])#.to(device)
             if sum_probabilities is None:
                 sum_probabilities = weighted_prob
             else:
@@ -465,6 +470,144 @@ def main():
 
         train(data_dir, data_transforms, args.transforms, len(CLASS_NAMES),
             im_height, im_width, args)
+'''
+        train_set = torchvision.datasets.ImageFolder(data_dir / 'train', data_transforms)
+        datasets = [train_set]
+        if args.transforms != None:
+            for transformation in args.transforms:
+                try:
+                    transform_dir = trans_data_dir / 'train' / transformation
+                    print ("Reading transformed data from {}".format(transform_dir))
+                    trans_set = torchvision.datasets.ImageFolder(transform_dir, data_transforms)
+                    print ("Read {} transformed samples"
+                            .format( len(trans_set) ))
+                    datasets.append(trans_set)
+                except:
+                    print ("Reading transformed data FAILED, this data may not exist or may have a different name")
+        if args.weights != None:
+            datasets = reweightDatasets(datasets, [1] + args.weights)
+
+        complete_dataset = torch.utils.data.ConcatDataset(datasets)
+        complete_data_len = len(complete_dataset)
+        print('Discovered {} training samples (original and transformed)'
+                .format( complete_data_len ))
+
+        # Create the training data generator
+        batch_size = args.batchsize
+        train_loader = torch.utils.data.DataLoader(complete_dataset, batch_size=batch_size,
+                                                   shuffle=True, num_workers=4, pin_memory=True)
+
+        # If args.data > 1, num_batches will have no impact on training
+        if args.true_epoch:
+            num_batches = args.data * complete_data_len / batch_size
+        else:
+            num_batches = args.data * training_image_count / batch_size
+        num_epochs = int(math.ceil(args.data))
+
+        params = {'lrs': args.learningrates, 
+                'partitions': args.partitions, 
+                'bn_lr': args.batchnorm_lr,
+                'decay_schedule': {
+                    'decay_rate': args.decayrate,
+                    'decay_coeff': args.decaycoeff,
+                    'decay_thres': args.decaythres,
+                    'circular_lr': args.circular_lr,
+                    },
+                'dropout_rate': args.dropout_rate,
+                'dropout_size': args.dropout_architecture,
+                }
+
+        model_args = (len(CLASS_NAMES), im_height, im_width, params)
+        if len(args.checkpoints) == 1:
+            model, model_name = getModelFromCheckpoint(args.checkpoints[0], model_args, device)
+        else:
+            model, model_name = getModelFromName(args.models, model_args)
+
+        # For GPU
+        if device.type == 'cuda':
+            model.to(device)
+
+        if len(model.optim_params) == 0:
+            optim = torch.optim.Adam(model.parameters())
+        else:
+            optim = torch.optim.Adam(model.optim_params)
+        criterion = nn.CrossEntropyLoss()
+        model.train()
+        start_time = time.time()
+
+        f = initializeLogging(args.logfile, model_name)
+
+        val_history = []
+        t = Timer()
+        for i in range(num_epochs):
+            print ("Epoch {}...".format(i))
+            train_total, train_correct, train_acc, moving_train_acc, train_loss = [], [], [], [], []
+            for idx, (inputs, targets) in enumerate(train_loader):
+                if idx > num_batches:
+                    break
+                
+                # copy to gpu
+                inputs = inputs.to(device)
+                targets = targets.to(device)
+
+                # gpu
+                optim.zero_grad()
+                outputs = model(inputs)
+                loss = criterion(outputs, targets)
+                loss.backward()
+                optim.step()
+                _, predicted = outputs.max(1)
+
+                total = targets.size(0)
+                correct = predicted.eq(targets).sum().item()
+                train_total.append (total)
+                train_correct.append (correct)
+
+                if (len(train_total) > TRAINING_MOVING_AVG):
+                    train_total.pop(0)
+                    train_correct.pop(0)
+                
+                moving_avg = sum(train_correct) / sum(train_total)
+
+                print("\r", end='')
+                print(f'[{100 * idx / len(train_loader):.2f}%] acc: {100 * moving_avg:.2f}, loss: {loss:.2f}', end='')
+                moving_train_acc.append(100. * moving_avg)
+                train_acc.append(100. * correct / total)
+                train_loss.append(loss)
+
+            val_acc, top5_acc = validate(data_dir, data_transforms, len(CLASS_NAMES), im_height, im_width, model=model)
+            val_history.append(val_acc)
+            optim = decayLR(optim, i, model, val_history)
+
+            ckpt_data = {
+                'net': model.state_dict(),
+                'command': ' '.join(sys.argv),
+                'model': model_name,
+                'checkpoint_file': '', 
+                'num_params': sum(p.numel() for p in model.parameters()),
+                'runtime': time.time() - start_time,
+                'timestamp': start_time,
+                'epoch': i + 1,
+                'machine': getpass.getuser(),
+                'moving_train_acc': moving_train_acc,
+                'train_acc': train_acc,
+                'train_loss': train_loss,
+                'validation_acc': val_acc * 100.,
+                'top5_validation': top5_acc * 100.,
+                'model_args': vars(args),
+            }
+            filename = str(getCheckpointFileName(ckpt_data))
+            ckpt_data['checkpoint_file'] = filename
+            
+            saveCheckpoint(ckpt_data)
+            logCheckpoint(f, ckpt_data)
+            print ()
+            # if isModelOverfitting(val_history):
+            #    break
+
+        if f is not None:
+            f.close()
+'''
 
 if __name__ == '__main__':
     main()

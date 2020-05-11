@@ -5,6 +5,7 @@ import torch.nn.functional as F
 from torch import nn
 from utils import *
 from statistics import pstdev
+from collections import OrderedDict
 
 WINDOW_LENGTH = 3
 
@@ -64,22 +65,41 @@ def ResNetCommon(resnet, num_classes, params):
 
     if params != None:
         # Initialize learning rates
+        resnet.decay_schedule = params['decay_schedule']
         lrs = params['lrs']
         partitions = params['partitions']
-        partition_assignment = partitionList(
+        dropout_rate = params.get('dropout_rate')
+        dropout_layers = params.get('dropout_size')
+
+        freeze_all = (partitions is None)
+
+        if not freeze_all:
+            partition_assignment = partitionList(
                 sum([1 for _ in resnet.named_children()]), partitions)
-        if params.get('bn_lr') == None:
-            bn_lr = 0
-        else:
-            bn_lr = params['bn_lr']
+
+        # Set defaults
+        if params.get('bn_lr') is None: bn_lr = 0
+        else: bn_lr = params['bn_lr']
 
         # Save other parameters
-        resnet.decay_schedule = params['decay_schedule']
+        
+        if not freeze_all:
+            num_features = resnet.fc.in_features
+            if dropout_rate is None:
+                resnet.fc = nn.Linear(num_features, num_classes)
+            else:
+                dropout_layers = [num_features * i 
+                        for i in dropout_layers]
+                layers = [num_features] + dropout_layers + \
+                        [num_classes]
+                resnet.fc = createDropoutUnit(dropout_rate,
+                        layers)
 
         for name, child in resnet.named_children():
-            partition = partition_assignment[ct]
+            if not freeze_all:
+                partition = partition_assignment[ct]
             for param_name, params in child.named_parameters():
-                if lrs[partition] == 0:
+                if freeze_all or lrs[partition] == 0:
                     if "bn" in param_name and \
                             bn_lr > 0:
                         optim_params = {'params': params}
@@ -92,10 +112,28 @@ def ResNetCommon(resnet, num_classes, params):
                     optim_params['lr'] = lrs[partition]
                     resnet.optim_params.append(optim_params)
             ct += 1
+        if freeze_all:
+            num_features = resnet.fc.in_features
+            resnet.fc = nn.Linear(num_features, num_classes)
 
-    num_features = resnet.fc.in_features
-    resnet.fc = nn.Linear(num_features, num_classes)
     return resnet
+
+def createDropoutUnit(drop_rate, layer_sizes):
+    layers = []
+    prev = layer_sizes[0]
+    for i, features in enumerate(layer_sizes[1:-1]):
+        layers.extend([
+            ('fc{}'.format(i), nn.Linear(prev, features)),
+            ('drop{}'.format(i), nn.Dropout(p=drop_rate)),
+            ('relu{}'.format(i), nn.ReLU(inplace=True)),
+        ])
+
+        prev = features
+    layers.extend([
+        ('fc', nn.Linear(prev, layer_sizes[-1]))
+        ])
+
+    return nn.Sequential(OrderedDict(layers))
 
 #########################################################################
 # DYNAMIC MODEL MODIFICATION
@@ -105,6 +143,7 @@ def decayLR(optim, epoch, model, history):
     decay_rate = model.decay_schedule["decay_rate"]
     decay = model.decay_schedule["decay_coeff"]
     decay_thres = model.decay_schedule["decay_thres"]
+    circular_lr = model.decay_schedule["circular_lr"]
 
     isDecayEpoch = False
     if decay == 1:
@@ -120,6 +159,16 @@ def decayLR(optim, epoch, model, history):
     if isDecayEpoch:
         for params_dict in model.optim_params:
             params_dict['lr'] = decay * params_dict['lr']
+
+    if circular_lr is not None and epoch > 0:
+        print ("SHOULD NOT ENTER! CIRCULAR LR (WIP)")
+        if epoch % 2 == 1:
+            mult = circular_lr
+        else:
+            mult = 1/circular_lr
+        for params_dict in model.optim_params:
+            params_dict['lr'] = mult * params_dict['lr']
+
     return torch.optim.Adam(model.optim_params)
 
 str_to_net = {
