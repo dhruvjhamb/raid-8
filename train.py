@@ -266,7 +266,8 @@ def cross_validate(data_dir, data_transforms, num_classes, im_height, im_width, 
         print('Need to specify transforms')
         return
     f = initializeLogging(args.logfile, 'Ensemble')
-    for i in range(len(args.transforms)):
+    base_count = args.transforms.count('BASE')
+    for i in range(base_count, len(args.transforms)):
         print('Training with:', args.transforms[:i] + args.transforms[i+1:])
         print('Validation with:', args.transforms[i])
         f.write('Training with: ' + str(args.transforms[:i] + args.transforms[i+1:]) + '\n')
