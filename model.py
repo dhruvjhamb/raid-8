@@ -115,6 +115,10 @@ def ResNetCommon(resnet, num_classes, params):
         if freeze_all:
             num_features = resnet.fc.in_features
             resnet.fc = nn.Linear(num_features, num_classes)
+    else:
+        # Validation case
+        num_features = resnet.fc.in_features
+        resnet.fc = nn.Linear(num_features, num_classes)
 
     return resnet
 
