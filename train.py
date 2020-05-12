@@ -267,14 +267,22 @@ def cross_validate(data_dir, data_transforms, num_classes, im_height, im_width, 
         return
     f = initializeLogging(args.logfile, 'Ensemble')
     base_count = args.transforms.count('BASE')
+    top_1_accs = []
+    top_5_accs = []
     for i in range(base_count, len(args.transforms)):
         print('Training with:', args.transforms[:i] + args.transforms[i+1:])
         print('Validation with:', args.transforms[i])
         f.write('Training with: ' + str(args.transforms[:i] + args.transforms[i+1:]) + '\n')
         f.write('Validation with: ' + str(args.transforms[i]) + '\n')
         val_acc, topk_val_acc = validate(data_dir, data_transforms, num_classes, im_height, im_width, checkpoint=args.checkpoints[:i] + args.checkpoints[i+1:], args_transforms=[args.transforms[i]])
+        top_1_accs.append(val_acc)
+        top_5_accs.append(topk_val_acc)
         f.write('Top-1 Validation Accuracy: ' + str(val_acc) + '\n')
         f.write('Top-5 Validation Accuracy: ' + str(topk_val_acc) + '\n')
+    f.write('All Accuracies:\n')
+    f.write('Top-1 Validation Accuracies: ' + ' '.join(map(str, top_1_accs)) + '\n')
+    f.write('Top-5 Validation Accuracies: ' + ' '.join(map(str, top_5_accs)) + '\n')
+    f.close()
 
 
 def train(data_dir, data_transforms, args_transforms, num_classes,
