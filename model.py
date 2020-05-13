@@ -9,7 +9,7 @@ from statistics import pstdev
 WINDOW_LENGTH = 3
 
 class Net(nn.Module):
-    def __init__(self, num_classes, im_height, im_width, params):
+    def __init__(self, num_classes, im_height, im_width, params=None):
         super(Net, self).__init__()
         self.conv1 = nn.Conv2d(3, 32, 3, padding=1)
 #       self.conv2 = nn.Conv2d(32, 64, 3, padding=1)
@@ -26,7 +26,7 @@ class Net(nn.Module):
         return x
 
 class DummyNet(nn.Module):
-    def __init__(self, num_classes, im_height, im_width, params):
+    def __init__(self, num_classes, im_height, im_width, params=None):
         super(DummyNet, self).__init__()
         self.layer1 = nn.Linear(im_height * im_width * 3, num_classes)
         self.optim_params = self.parameters()
@@ -37,7 +37,7 @@ class DummyNet(nn.Module):
         x = self.layer1(x)
         return x
 
-def AlexFineTuned(num_classes, im_height, im_width, params):
+def AlexFineTuned(num_classes, im_height, im_width, params=None):
     alexnet = torchvision.models.alexnet(pretrained=True)
     for param in alexnet.parameters():
         param.requires_grad = False
@@ -45,20 +45,20 @@ def AlexFineTuned(num_classes, im_height, im_width, params):
     alexnet.classifier[6] = nn.Linear(num_features, num_classes)
     return alexnet
 
-def ResNetFineTuned(num_classes, im_height, im_width, params):
+def ResNetFineTuned(num_classes, im_height, im_width, params=None):
     # finetuning - https://medium.com/@14prakash/almost-any-image-classification-problem-using-pytorch-i-am-in-love-with-pytorch-26c7aa979ec4
     resnet = torchvision.models.resnet18(pretrained=True)
     return ResNetCommon(resnet, num_classes, params)
 
-def ResNet34FineTuned(num_classes, im_height, im_width, params):
+def ResNet34FineTuned(num_classes, im_height, im_width, params=None):
     resnet = torchvision.models.resnet34(pretrained=True)
     return ResNetCommon(resnet, num_classes, params)
 
-def ResNextFineTuned(num_classes, im_height, im_width, params):
+def ResNextFineTuned(num_classes, im_height, im_width, params=None):
     resnext50_32x4d = torchvision.models.resnext50_32x4d(pretrained=True)
     return ResNetCommon(resnext50_32x4d, num_classes, params)
 
-def ResNetCommon(resnet, num_classes, params):
+def ResNetCommon(resnet, num_classes, params=None):
     ct = 0
     resnet.optim_params = []
 
