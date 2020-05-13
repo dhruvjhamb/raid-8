@@ -11,6 +11,7 @@ plots/*
 checkpoints/
 logs/
 *.pt
+!ensemble/*
 __pycache__/
 *.DS_Store
 experiment.sh

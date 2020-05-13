@@ -14,10 +14,15 @@ def main():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     # Load the classes
     data_dir = pathlib.Path('./data/tiny-imagenet-200/train/')
-    CLASSES = [item.name for item in data_dir.glob('*')]
+    CLASSES = sorted([item.name for item in data_dir.glob('*')])
     im_height, im_width = 224, 224
 
-    checkpoints = ['./checkpoints/resnext/topaz-base.pt','./checkpoints/resnext/topaz-flip.pt','./checkpoints/resnext/topaz-jitter.pt','./checkpoints/resnext/topaz-rotate.pt','./checkpoints/resnext/topaz-shear.pt']
+    checkpoints = ['./ensemble/topaz-base.pt',
+            './ensemble/topaz-flip.pt',
+            './ensemble/topaz-jitter.pt',
+            './ensemble/topaz-rotate.pt',
+            './ensemble/topaz-shear.pt'
+            ]
     weights = [0.2,0.2,0.2,0.2,0.2]
     models = []
     for cpt in checkpoints:
@@ -25,6 +30,8 @@ def main():
             model = str_to_net[ckpt['model']](len(CLASSES), im_height, im_width, None)
 
             model.load_state_dict(ckpt['net'])
+            if device.type == 'cuda':
+                model.to(device)
             model.eval()
             # print ("Number of parameters: {}, Time: {}, User: {}"
             #                 .format(ckpt['num_params'], ckpt['runtime'], ckpt['machine'])) 
