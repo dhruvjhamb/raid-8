@@ -27,11 +27,14 @@ def main():
         print("need .png in --name")
         return
     fig, ax = plt.subplots()
+    ax.set(ylim=[85, 95])
+    plt.xticks(rotation=45)
+    plt.subplots_adjust(bottom=0.3)
     ax.bar(labels, values)
     ax.set_xlabel(x_axis, fontsize=16)
     ax.set_ylabel(y_axis, fontsize=16)
     plots_dir = pathlib.Path('./plots')
     plt.savefig(plots_dir / name)
 
-                                                                                                        if __name__ == '__main__':
-                                                                                                                main()
+if __name__ == '__main__':
+    main()

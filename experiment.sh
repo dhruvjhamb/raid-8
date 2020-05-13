@@ -28,5 +28,14 @@
 # Train with transforms
 #CUDA_VISIBLE_DEVICES=1 python train.py --data 20 resnext --learningrates 1e-5 1e-4 1e-3 --partitions 6 3 1 --decayrate 1 --decaycoeff 0.75 --circular_lr 0.1 --transforms shear --logfile topaz-shear
 #CUDA_VISIBLE_DEVICES=1 python train.py --data 20 resnext --learningrates 1e-5 1e-4 1e-3 --partitions 6 3 1 --decayrate 1 --decaycoeff 0.75 --circular_lr 0.1 --transforms flip --logfile topaz-flip
-CUDA_VISIBLE_DEVICES=0 python train.py --data 20 resnext --learningrates 1e-5 1e-4 1e-3 --partitions 6 3 1 --decayrate 1 --decaycoeff 0.75 --circular_lr 0.1 --transforms rotateWithin45 --logfile topaz-rotate
-CUDA_VISIBLE_DEVICES=0 python train.py --data 20 resnext --learningrates 1e-5 1e-4 1e-3 --partitions 6 3 1 --decayrate 1 --decaycoeff 0.75 --circular_lr 0.1 --transforms jitter --logfile topaz-jitter
+# CUDA_VISIBLE_DEVICES=0 python train.py --data 20 resnext --learningrates 1e-5 1e-4 1e-3 --partitions 6 3 1 --decayrate 1 --decaycoeff 0.75 --circular_lr 0.1 --transforms rotateWithin45 --logfile topaz-rotate
+# CUDA_VISIBLE_DEVICES=0 python train.py --data 20 resnext --learningrates 1e-5 1e-4 1e-3 --partitions 6 3 1 --decayrate 1 --decaycoeff 0.75 --circular_lr 0.1 --transforms jitter --logfile topaz-jitter
+# CUDA_VISIBLE_DEVICES=1 python train.py --data 20 resnext --learningrates 1e-5 1e-4 1e-3 --partitions 6 3 1 --decayrate 1 --decaycoeff 0.75 --circular_lr 0.1 --transforms blur --logfile topaz-blur
+
+
+# CUDA_VISIBLE_DEVICES=1 python train.py --data 10 resnext --logfile tin-base
+# CUDA_VISIBLE_DEVICES=1 python train.py --data 10 resnext --logfile tin-jitter --transforms jitter
+# CUDA_VISIBLE_DEVICES=1 python train.py --data 10 resnext --logfile tin-rotate --transforms rotateWithin45
+CUDA_VISIBLE_DEVICES=0 python train.py --data 10 resnext --logfile tin-shear --transforms shear
+CUDA_VISIBLE_DEVICES=0 python train.py --data 10 resnext --logfile tin-flip --transforms flip
+

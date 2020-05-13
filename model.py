@@ -96,6 +96,7 @@ def ResNetCommon(resnet, num_classes, params):
                         layers)
 
         for name, child in resnet.named_children():
+            print(name)
             if not freeze_all:
                 partition = partition_assignment[ct]
             for param_name, params in child.named_parameters():
