@@ -36,6 +36,6 @@
 # CUDA_VISIBLE_DEVICES=1 python train.py --data 10 resnext --logfile tin-base
 # CUDA_VISIBLE_DEVICES=1 python train.py --data 10 resnext --logfile tin-jitter --transforms jitter
 # CUDA_VISIBLE_DEVICES=1 python train.py --data 10 resnext --logfile tin-rotate --transforms rotateWithin45
-CUDA_VISIBLE_DEVICES=0 python train.py --data 10 resnext --logfile tin-shear --transforms shear
-CUDA_VISIBLE_DEVICES=0 python train.py --data 10 resnext --logfile tin-flip --transforms flip
+# CUDA_VISIBLE_DEVICES=0 python train.py --data 10 resnext --logfile tin-shear --transforms shear
+# CUDA_VISIBLE_DEVICES=0 python train.py --data 10 resnext --logfile tin-flip --transforms flip
 
