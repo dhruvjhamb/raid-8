@@ -51,6 +51,9 @@ def parse():
     parser.add_argument('--batchsize', type=int, default=32)
     parser.add_argument('--true_epoch', action='store_true')
     parser.add_argument('--batchnorm_lr', type=float)
+    parser.add_argument('--circular_lr', type=float)
+    parser.add_argument('--dropout_rate', type=float)
+    parser.add_argument('--dropout_architecture', type=int, nargs='*')
     return parser.parse_args()
 
 def reweightDatasets(datasets, weights):
@@ -151,18 +154,19 @@ def isModelOverfitting(history):
 #         samples.append(sample(modes, 1)[0])
 #     return samples
 
-# def k_accuracy(outputs, targets, k):
-#     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-#     batch_size = targets.to(device).size(0)
-#     _, pred = outputs.to(device).topk(k, 1, True, True)
-#     pred = pred.t()
-#     correct = pred.eq(targets.to(device).view(1, -1).expand_as(pred.to(device)))
-#     correct_k = correct[:k].view(-1).float().sum(0, keepdim=True)
-#     return correct_k.mul_(100.0 / batch_size).item() / 100.0
+def k_accuracy(outputs, targets, k):
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    batch_size = targets.to(device).size(0)
+    _, pred = outputs.to(device).topk(k, 1, True, True)
+    pred = pred.t()
+    correct = pred.eq(targets.to(device).view(1, -1).expand_as(pred.to(device)))
+    correct_k = correct[:k].view(-1).float().sum(0, keepdim=True)
+    return correct_k.item()
 
 def validate(data_dir, data_transforms, num_classes,
     im_height, im_width, args_transforms=None, checkpoint=None, model=None, random_choice=False, weights=None):
     
+    t = Timer()
     load_from_ckpt = (model == None)
 
     # setting device on GPU if available, else CPU
@@ -227,28 +231,44 @@ def validate(data_dir, data_transforms, num_classes,
             mod.to(device)
         mod.eval()
 
-    torch.cuda.empty_cache()
+    # torch.cuda.empty_cache()
     val_total, val_correct, val_topk_correct = 0, 0, 0
     k=5
     for idx, (inputs, targets) in enumerate(val_loader):
-        sum_probabilities = None
-        for i in range(len(model)):
-            outputs = model[i](inputs.to(device))
-            probabilites = (nn.Softmax(dim=-1)(outputs)).to(device)
-            weighted_prob = (probabilites*weights[i]).to(device)
-            if sum_probabilities is None:
-                sum_probabilities = weighted_prob
-            else:
-                sum_probabilities = sum_probabilities + weighted_prob
-                sum_probabilities = sum_probabilities.to(device)
+        inputs = inputs.to(device)
+        if False:
+            sum_probabilities = None
+            for i in range(len(model)):
+                outputs = model[i](inputs)
+                probabilites = (nn.Softmax(dim=-1)(outputs))#.to(device)
+                weighted_prob = (probabilites*weights[i])#.to(device)
+                if sum_probabilities is None:
+                    sum_probabilities = weighted_prob
+                else:
+                    sum_probabilities = sum_probabilities + weighted_prob
+                    sum_probabilities = sum_probabilities.to(device)
 
-        _, predicted = sum_probabilities.max(1)
-        _, predicted_topk = sum_probabilities.topk(k, 1, True, True)
-        predicted_topk = predicted_topk.t()
-        correct = predicted_topk.eq(targets.to(device).view(1, -1).expand_as(predicted_topk.to(device)))
-        val_topk_correct += correct[:k].view(-1).float().sum(0).item()
-        val_correct += predicted.eq(targets.to(device)).sum().item()
-        val_total += targets.size(0)
+            _, predicted = sum_probabilities.max(1)
+            _, predicted_topk = sum_probabilities.topk(k, 1, True, True)
+            predicted_topk = predicted_topk.t()
+            correct = predicted_topk.eq(targets.to(device).view(1, -1).expand_as(predicted_topk.to(device)))
+            val_topk_correct += correct[:k].view(-1).float().sum(0).item()
+            val_correct += predicted.eq(targets.to(device)).sum().item()
+            val_total += targets.size(0)
+        else:
+            all_predictions = None
+            for mod in model:
+                outputs = mod(inputs)
+                _, predicted = outputs.max(1)
+                if all_predictions is None:
+                    all_predictions = predicted.view(1, predicted.shape[0])
+                else:
+                    all_predictions = torch.cat((all_predictions, predicted.view(1, predicted.shape[0])), 0)
+            popular_vote = torch.mode(all_predictions, dim = 0)[0]
+            val_correct += popular_vote.eq(targets.to(device)).sum().item()
+            val_topk_correct += k_accuracy(outputs, targets, 5)
+            val_total += targets.size(0)
+
 
         print("\r", end='')
         print(f'validation {100 * idx / len(val_loader):.2f}% complete top-1: {val_correct / val_total:.3f} top-5: {val_topk_correct / val_total:.3f}', end='')
@@ -260,10 +280,24 @@ def cross_validate(data_dir, data_transforms, num_classes, im_height, im_width, 
     if args.transforms == None:
         print('Need to specify transforms')
         return
-    for i in range(len(args.transforms)):
+    f = initializeLogging(args.logfile, 'Ensemble')
+    base_count = args.transforms.count('BASE')
+    top_1_accs = []
+    top_5_accs = []
+    for i in range(base_count, len(args.transforms)):
         print('Training with:', args.transforms[:i] + args.transforms[i+1:])
         print('Validation with:', args.transforms[i])
-        model = train(data_dir, data_transforms, args.transforms[:i] + args.transforms[i+1:], num_classes, im_height, im_width, args, val_transforms=[args.transforms[i]])
+        f.write('Training with: ' + str(args.transforms[:i] + args.transforms[i+1:]) + '\n')
+        f.write('Validation with: ' + str(args.transforms[i]) + '\n')
+        val_acc, topk_val_acc = validate(data_dir, data_transforms, num_classes, im_height, im_width, checkpoint=args.checkpoints[:i] + args.checkpoints[i+1:], args_transforms=[args.transforms[i]])
+        top_1_accs.append(val_acc)
+        top_5_accs.append(topk_val_acc)
+        f.write('Top-1 Validation Accuracy: ' + str(val_acc) + '\n')
+        f.write('Top-5 Validation Accuracy: ' + str(topk_val_acc) + '\n')
+    f.write('All Accuracies:\n')
+    f.write('Top-1 Validation Accuracies: ' + ' '.join(map(str, top_1_accs)) + '\n')
+    f.write('Top-5 Validation Accuracies: ' + ' '.join(map(str, top_5_accs)) + '\n')
+    f.close()
 
 
 def train(data_dir, data_transforms, args_transforms, num_classes,
@@ -316,8 +350,11 @@ def train(data_dir, data_transforms, args_transforms, num_classes,
             'decay_schedule': {
                 'decay_rate': args.decayrate,
                 'decay_coeff': args.decaycoeff,
-                'decay_thres': args.decaythres
-                }
+                'decay_thres': args.decaythres,
+                'circular_lr': args.circular_lr,
+                },
+            'dropout_rate': args.dropout_rate,
+            'dropout_size': args.dropout_architecture,
             }
 
     model_args = (len(CLASS_NAMES), im_height, im_width, params)
@@ -330,7 +367,9 @@ def train(data_dir, data_transforms, args_transforms, num_classes,
     if device.type == 'cuda':
         model.to(device)
 
-    optim = torch.optim.Adam(model.optim_params)
+    optim = torch.optim.Adam(model.parameters())
+    if len(model.optim_params) > 0:
+        optim = torch.optim.Adam(model.optim_params)
     criterion = nn.CrossEntropyLoss()
     model.train()
     start_time = time.time()
@@ -420,7 +459,10 @@ def main():
     trans_data_dir = pathlib.Path('./data/tiny-imagenet-transformed')
     image_count = len(list(data_dir.glob('**/*.JPEG')))
     training_image_count = len(list(data_dir.glob('train/**/*.JPEG')))
-    CLASS_NAMES = np.array([item.name for item in (data_dir / 'train').glob('*')])
+    CLASS_NAMES = [item.name for item in (data_dir / 'train').glob('*')]
+    if '.DS_Store' in CLASS_NAMES:
+        CLASS_NAMES.remove('.DS_Store')
+    CLASS_NAMES = np.array(CLASS_NAMES)
     print('Discovered {} total images'.format(image_count))
     print('Discovered {} training images'.format(training_image_count))
     print('Training with {} of the dataset ({} training images)'.format(
@@ -441,12 +483,7 @@ def main():
             im_height, im_width, checkpoint=args.checkpoints, weights=args.checkpoint_weights)
         
     elif args.cross_val:
-        assert len(args.models) <= 1, "If training, do not pass in more than one model."
-        if args.checkpoints != None:
-            assert args.checkpoints == None or len(args.checkpoints) <= 1, "If training, do not pass in more than one checkpoint."
-            assert len(args.models) + len(args.checkpoints) <= 1, "Cannot pass in both a model and " \
-                + "a checkpoint."
-        else:
+        if args.checkpoints == None:
             args.checkpoints = []
             
         cross_validate(data_dir, data_transforms, len(CLASS_NAMES), im_height, im_width, args)
@@ -462,6 +499,144 @@ def main():
 
         train(data_dir, data_transforms, args.transforms, len(CLASS_NAMES),
             im_height, im_width, args)
+'''
+        train_set = torchvision.datasets.ImageFolder(data_dir / 'train', data_transforms)
+        datasets = [train_set]
+        if args.transforms != None:
+            for transformation in args.transforms:
+                try:
+                    transform_dir = trans_data_dir / 'train' / transformation
+                    print ("Reading transformed data from {}".format(transform_dir))
+                    trans_set = torchvision.datasets.ImageFolder(transform_dir, data_transforms)
+                    print ("Read {} transformed samples"
+                            .format( len(trans_set) ))
+                    datasets.append(trans_set)
+                except:
+                    print ("Reading transformed data FAILED, this data may not exist or may have a different name")
+        if args.weights != None:
+            datasets = reweightDatasets(datasets, [1] + args.weights)
+
+        complete_dataset = torch.utils.data.ConcatDataset(datasets)
+        complete_data_len = len(complete_dataset)
+        print('Discovered {} training samples (original and transformed)'
+                .format( complete_data_len ))
+
+        # Create the training data generator
+        batch_size = args.batchsize
+        train_loader = torch.utils.data.DataLoader(complete_dataset, batch_size=batch_size,
+                                                   shuffle=True, num_workers=4, pin_memory=True)
+
+        # If args.data > 1, num_batches will have no impact on training
+        if args.true_epoch:
+            num_batches = args.data * complete_data_len / batch_size
+        else:
+            num_batches = args.data * training_image_count / batch_size
+        num_epochs = int(math.ceil(args.data))
+
+        params = {'lrs': args.learningrates, 
+                'partitions': args.partitions, 
+                'bn_lr': args.batchnorm_lr,
+                'decay_schedule': {
+                    'decay_rate': args.decayrate,
+                    'decay_coeff': args.decaycoeff,
+                    'decay_thres': args.decaythres,
+                    'circular_lr': args.circular_lr,
+                    },
+                'dropout_rate': args.dropout_rate,
+                'dropout_size': args.dropout_architecture,
+                }
+
+        model_args = (len(CLASS_NAMES), im_height, im_width, params)
+        if len(args.checkpoints) == 1:
+            model, model_name = getModelFromCheckpoint(args.checkpoints[0], model_args, device)
+        else:
+            model, model_name = getModelFromName(args.models, model_args)
+
+        # For GPU
+        if device.type == 'cuda':
+            model.to(device)
+
+        if len(model.optim_params) == 0:
+            optim = torch.optim.Adam(model.parameters())
+        else:
+            optim = torch.optim.Adam(model.optim_params)
+        criterion = nn.CrossEntropyLoss()
+        model.train()
+        start_time = time.time()
+
+        f = initializeLogging(args.logfile, model_name)
+
+        val_history = []
+        t = Timer()
+        for i in range(num_epochs):
+            print ("Epoch {}...".format(i))
+            train_total, train_correct, train_acc, moving_train_acc, train_loss = [], [], [], [], []
+            for idx, (inputs, targets) in enumerate(train_loader):
+                if idx > num_batches:
+                    break
+                
+                # copy to gpu
+                inputs = inputs.to(device)
+                targets = targets.to(device)
+
+                # gpu
+                optim.zero_grad()
+                outputs = model(inputs)
+                loss = criterion(outputs, targets)
+                loss.backward()
+                optim.step()
+                _, predicted = outputs.max(1)
+
+                total = targets.size(0)
+                correct = predicted.eq(targets).sum().item()
+                train_total.append (total)
+                train_correct.append (correct)
+
+                if (len(train_total) > TRAINING_MOVING_AVG):
+                    train_total.pop(0)
+                    train_correct.pop(0)
+                
+                moving_avg = sum(train_correct) / sum(train_total)
+
+                print("\r", end='')
+                print(f'[{100 * idx / len(train_loader):.2f}%] acc: {100 * moving_avg:.2f}, loss: {loss:.2f}', end='')
+                moving_train_acc.append(100. * moving_avg)
+                train_acc.append(100. * correct / total)
+                train_loss.append(loss)
+
+            val_acc, top5_acc = validate(data_dir, data_transforms, len(CLASS_NAMES), im_height, im_width, model=model)
+            val_history.append(val_acc)
+            optim = decayLR(optim, i, model, val_history)
+
+            ckpt_data = {
+                'net': model.state_dict(),
+                'command': ' '.join(sys.argv),
+                'model': model_name,
+                'checkpoint_file': '', 
+                'num_params': sum(p.numel() for p in model.parameters()),
+                'runtime': time.time() - start_time,
+                'timestamp': start_time,
+                'epoch': i + 1,
+                'machine': getpass.getuser(),
+                'moving_train_acc': moving_train_acc,
+                'train_acc': train_acc,
+                'train_loss': train_loss,
+                'validation_acc': val_acc * 100.,
+                'top5_validation': top5_acc * 100.,
+                'model_args': vars(args),
+            }
+            filename = str(getCheckpointFileName(ckpt_data))
+            ckpt_data['checkpoint_file'] = filename
+            
+            saveCheckpoint(ckpt_data)
+            logCheckpoint(f, ckpt_data)
+            print ()
+            # if isModelOverfitting(val_history):
+            #    break
+
+        if f is not None:
+            f.close()
+'''
 
 if __name__ == '__main__':
     main()

@@ -3,7 +3,7 @@ import torch
 import torchvision
 import torchvision.transforms as transforms
 from PIL import Image
-import kornia
+#import kornia
 
 from utils import *
 from transform import *

@@ -12,19 +12,22 @@ import torchvision.transforms as transforms
 from model import *
 import time
 import PIL
+import matplotlib
 import matplotlib.pyplot as plt
+matplotlib.use('Agg')
 
 from torch import nn
 
 def _parse():
     parser = argparse.ArgumentParser(description='Plot model results from a checkpoint.')
-    parser.add_argument('--checkpoint', metavar='checkpoint', type=str, nargs='*')
+    parser.add_argument('--checkpoints', metavar='checkpoint', type=str, nargs='*')
+    parser.add_argument('--model_labels', metavar='label', type=str, nargs='*')
     parser.add_argument('--top5', action='store_true')
     return parser.parse_args()
 
 def main():
     args = _parse() 
-    for i, cpt in enumerate(args.checkpoint):
+    for i, cpt in enumerate(args.checkpoints):
         ckpt_dir = './checkpoints/'
         plots_dir = pathlib.Path('./plots')
         cptt = cpt.split('-')
@@ -35,8 +38,8 @@ def main():
         while i <= epoch:
             ckpt = torch.load(ckpt_dir + cptt[0] + '-' + str(i) + '.pt', map_location=torch.device('cuda' if torch.cuda.is_available() else 'cpu'))
             if ckpt.get('train_acc') is not None:
-                train_acc.extend(ckpt['moving_train_acc'])
-                train_loss.extend(ckpt['train_loss'])
+                train_acc.extend(ckpt['train_acc'])
+                # train_loss.extend(ckpt['train_loss'])
                 val_dx.append(len(ckpt['train_acc']) * i - 1)
             val_acc.append(ckpt['validation_acc'])
             if ckpt.get('top5_validation') is not None:
@@ -54,23 +57,24 @@ def main():
         if len(top5_acc) == len(val_acc):
             ax.plot(val_dx, top5_acc, label='top-5 accuracy', linewidth=8)
         ax.legend()
-        ax.set_xlabel('iterations', fontsize=16)
-        ax.set_ylabel('accuracy', fontsize=16)
+        ax.set_xlabel('Batches', fontsize=16)
+        ax.set_ylabel('Accuracy', fontsize=16)
         plt.savefig(plots_dir / (outfile + '-acc.png'))
+        print ("Saved diagram for checkpoint {}".format(cpt))
 
-        fig1, ax1 = plt.subplots()
-        if len(train_loss) > 0:
-            ax1.plot(train_loss, label='train loss')
-        ax.legend()
-        ax.set_xlabel('iterations', fontsize=16)
-        ax.set_ylabel('loss', fontsize=16)
+        # fig1, ax1 = plt.subplots()
+        # if len(train_loss) > 0:
+        #     ax1.plot(train_loss, label='train loss')
+        # ax.legend()
+        # ax.set_xlabel('iterations', fontsize=16)
+        # ax.set_ylabel('loss', fontsize=16)
 
-        plt.savefig(plots_dir / (outfile + '-loss.png'))
+        # plt.savefig(plots_dir / (outfile + '-loss.png'))
      
-    if len(args.checkpoint) > 1:
+    if len(args.checkpoints) > 1:
         fig, ax = plt.subplots()
         outfile = ''
-        for cpt in args.checkpoint:
+        for idx, cpt in enumerate(args.checkpoints):
             cptt = cpt.split('-')
             outfile += cptt[0].replace('/', '_') + '_'
             epoch = int(cptt[1][:-3])
@@ -84,12 +88,12 @@ def main():
                     val_acc.append(ckpt['top5_validation'])
                 i += 1
             if len(val_dx) == len(val_acc):
-                ax.plot(val_dx, val_acc, label=cptt[0].replace('/', '_'))
+                ax.plot(val_dx, val_acc, label=args.model_labels[idx])
             else:
-                ax.plot(val_acc, label=cptt[0].replace('/', '_'))
+                ax.plot(val_acc, label=args.model_labels[idx])
         ax.legend()
-        ax.set_xlabel('iterations', fontsize=16)
-        ax.set_ylabel('accuracy', fontsize=16)
+        ax.set_xlabel('Epochs', fontsize=16)
+        ax.set_ylabel('Accuracy', fontsize=16)
         plt.savefig(plots_dir / (outfile + '-multi.png'))            
 
 if __name__ == '__main__':

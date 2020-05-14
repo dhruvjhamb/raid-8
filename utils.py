@@ -54,17 +54,14 @@ def ask_yes_no(question, max_tries=5, default=True):
 
 class Timer:
     def __init__(self):
-        self.start_t = -1
-        self.task = ""
+        self.tasks = {}
     def start(self, task: str):
-        self.start_t = time.time()
-        self.task = task
-    def end(self):
-        if self.start_t == -1:
-            print("start() was never called!")
+        self.tasks[task] = time.time()
+    def end(self, task: str):
+        if self.tasks.get(task) is None:
+            print("start() was never called for this task!")
         else:
             print("Task {} has finished in {} seconds"
-                    .format(self.task,
-                        time.time() - self.start_t))
-            self.start_t = -1
-            self.task = ""
+                    .format(task,
+                        time.time() - self.tasks[task]))
+            self.tasks[task] = None
