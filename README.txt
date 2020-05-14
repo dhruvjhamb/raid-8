@@ -19,5 +19,5 @@ Instructions:
 3. Run val_formatter.py to organize the validation data in a similar format to the training data
 4. Run train.py to train a model and save a checkpoint
 
-For example, the following command trains a ResNeXt model with the specified parameters on dataset containing unperturbed, flipped, and sheared training images:
+For example, the following command trains a ResNeXt model with the specified parameters on a dataset containing unperturbed, flipped, and sheared training images:
 python train.py --data 20 resnext --learningrates 1e-5 1e-4 1e-3 --partitions 6 3 1 --decayrate 1 --decaycoeff 0.75 --circular_lr 0.1 --transforms flip shear
