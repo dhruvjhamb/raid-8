@@ -11,7 +11,7 @@ model.py - Contains implemented model architectures
 synthetic_data.py - Applies transforms found in transforms.py to datasets to generate perturbed images
 transform.py - Contains transformations to be applied on the data
 
-Note: You should be using Python 3 to run this code.
+Note: You should be using Python 3.8 to run this code.
 
 Instructions:
 1. In data directory, run get_data.sh
