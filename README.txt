@@ -1,4 +1,4 @@
-This is some sample code for the CS 182/282 Computer Vision project (Tensorflow 2). It has the following files:
+This is some sample code for the CS 182/282 Computer Vision project (PyTorch). It has the following files:
 
 README.txt - This file
 requirements.txt - The python requirments necessary to run this project
