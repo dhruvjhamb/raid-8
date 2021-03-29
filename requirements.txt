@@ -38,7 +38,7 @@ prompt-toolkit==1.0.15
 ptyprocess==0.5
 pycosat==0.6.3
 pycurl==7.43.0
-Pygments==2.2.0
+Pygments==2.7.4
 PyMySQL==0.7.2
 PyOpenGL==3.0.2
 Pyste==0.9.10
